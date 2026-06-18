@@ -197,7 +197,19 @@ async function handleAgentRequest(
 					type: "status",
 					message: "Composing final answer",
 				});
-				await streamFinalAnswer(messages, plan, toolResults, env, controller, skill);
+				try {
+					await streamFinalAnswer(messages, plan, toolResults, env, controller, skill);
+				} catch (error) {
+					console.error("Error streaming Workers AI final answer:", error);
+					sendAgentEvent(controller, {
+						type: "status",
+						message: "Workers AI final answer unavailable; using local fallback",
+					});
+					sendAgentEvent(controller, {
+						type: "answer_delta",
+						content: createFallbackAnswer(plan, toolResults),
+					});
+				}
 				sendAgentEvent(controller, { type: "done" });
 			} catch (error) {
 				console.error("Error processing agent request:", error);
@@ -230,13 +242,22 @@ async function createPlan(
 		...messages.filter((message) => message.role !== "system"),
 	];
 
-	const result = await env.AI.run<typeof MODEL_ID>(MODEL_ID, {
-		messages: plannerMessages,
-		max_tokens: 512,
-	});
+	try {
+		const result = await env.AI.run<typeof MODEL_ID>(MODEL_ID, {
+			messages: plannerMessages,
+			max_tokens: 512,
+		});
 
-	const text = extractTextGenerationResponse(result);
-	return parsePlan(text, messages, skill);
+		const text = extractTextGenerationResponse(result);
+		return parsePlan(text, messages, skill);
+	} catch (error) {
+		console.error("Error running Workers AI planner:", error);
+		return createFallbackPlan(
+			messages,
+			skill,
+			"Workers AI planner is unavailable, so the agent will use the runbook search fallback.",
+		);
+	}
 }
 
 async function streamFinalAnswer(
@@ -556,26 +577,52 @@ function parsePlan(
 		};
 	} catch (error) {
 		console.error("Error parsing agent plan:", error, text);
-		const lastUserMessage = [...messages]
-			.reverse()
-			.find((message) => message.role === "user")?.content;
-		const fallbackTool = getFallbackToolForSkill(skill);
-
-		return {
-			thought: "Planner response was not valid JSON, so the agent will use the runbook search fallback.",
-			tool_calls: fallbackTool
-				? [
-						{
-							name: fallbackTool,
-							arguments:
-								fallbackTool === "lookup_account"
-									? { accountId: "demo-account" }
-									: { query: lastUserMessage ?? "agent workflow" },
-						},
-					]
-				: [],
-		};
+		return createFallbackPlan(
+			messages,
+			skill,
+			"Planner response was not valid JSON, so the agent will use the runbook search fallback.",
+		);
 	}
+}
+
+function createFallbackPlan(
+	messages: ChatMessage[],
+	skill: Skill | undefined,
+	thought: string,
+): AgentPlan {
+	const lastUserMessage = [...messages]
+		.reverse()
+		.find((message) => message.role === "user")?.content;
+	const fallbackTool = getFallbackToolForSkill(skill);
+
+	return {
+		thought,
+		tool_calls: fallbackTool
+			? [
+					{
+						name: fallbackTool,
+						arguments:
+							fallbackTool === "lookup_account"
+								? { accountId: "demo-account" }
+								: { query: lastUserMessage ?? "agent workflow" },
+					},
+				]
+			: [],
+	};
+}
+
+function createFallbackAnswer(plan: AgentPlan, toolResults: ToolResult[]): string {
+	const tools = toolResults.map((toolResult) => toolResult.name).join(", ");
+	const results = toolResults
+		.map((toolResult) => `${toolResult.name}: ${toolResult.result}`)
+		.join("\n\n");
+
+	return [
+		"I could not reach Workers AI for the final response, so this is a local fallback answer.",
+		`Plan: ${plan.thought}`,
+		`Tools used: ${tools || "none"}.`,
+		results ? `Tool results:\n${results}` : "No tool results were available.",
+	].join("\n\n");
 }
 
 function getFallbackToolForSkill(skill?: Skill): ToolName | undefined {
