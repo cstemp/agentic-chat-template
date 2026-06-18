@@ -1,0 +1,38 @@
+{
+	"name": "agent-workflow-template",
+	"description": "A bare-bones agentic workflow template powered by Cloudflare Workers AI",
+	"cloudflare": {
+		"label": "Agent Workflow App",
+		"products": [
+			"Workers",
+			"Workers AI",
+			"AI Gateway"
+		],
+		"categories": [
+			"ai"
+		],
+		"docs_url": "https://developers.cloudflare.com/workers-ai/",
+		"preview_icon_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/a974bd55-20c6-4656-fa29-1551d43ddc00/public",
+		"preview_image_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/65dd8441-89d3-491d-c5a1-0a000d070700/preview",
+		"publish": true
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.16.17",
+		"@cloudflare/workers-types": "^4.20260507.1",
+		"@types/node": "24.10.1",
+		"@vitest/runner": "^4.1.9",
+		"@vitest/snapshot": "^4.1.9",
+		"typescript": "5.9.3",
+		"vitest": "^4.1.9",
+		"wrangler": "^4.102.0"
+	},
+	"private": true,
+	"scripts": {
+		"cf-typegen": "wrangler types",
+		"check": "tsc --noEmit && wrangler deploy --dry-run",
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"test": "vitest --passWithNoTests"
+	}
+}
