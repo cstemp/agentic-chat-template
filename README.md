@@ -43,7 +43,7 @@ This template demonstrates how to build a minimal agentic workflow using Cloudfl
 1. Clone this repository:
 
    ```bash
-   git clone (https://github.com/cstemp/agentic-chat-template)
+   git clone https://github.com/cstemp/agentic-chat-template
    cd agent-workflow-template
    ```
 
