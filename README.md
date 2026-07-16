@@ -4,6 +4,8 @@ A full-featured agentic workspace template running entirely on Cloudflare's deve
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cstemp/agentic-chat-template)
 
+For a high-level summary, see the [Executive Overview](./OVERVIEW.md).
+
 <!-- dash-content-start -->
 
 ## Overview
