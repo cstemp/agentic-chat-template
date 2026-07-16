@@ -207,7 +207,7 @@ export function useWorkspace(workspaceId: string | undefined) {
   );
 
   const updateMessage = useCallback(
-    (messageId: string, updates: Partial<api.Message>) => {
+    (messageId: string, updates: Partial<api.Message>, persist = false) => {
       setWorkspace((prev) => {
         if (!prev) return prev;
         return {
@@ -217,8 +217,18 @@ export function useWorkspace(workspaceId: string | undefined) {
           ),
         };
       });
+
+      // Optionally persist to database
+      if (persist && workspaceId) {
+        api.updateMessage(workspaceId, messageId, {
+          content: updates.content,
+          steps: updates.steps,
+        }).catch((err) => {
+          console.error('Failed to persist message update:', err);
+        });
+      }
     },
-    []
+    [workspaceId]
   );
 
   const updateWorkspace = useCallback(

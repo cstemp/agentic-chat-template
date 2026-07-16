@@ -396,6 +396,12 @@ export default {
 			return handleMessagesRoute(request, env, user, messagesMatch[1], corsHeaders);
 		}
 
+		// Single message: /api/workspaces/:id/messages/:messageId
+		const messageMatch = url.pathname.match(/^\/api\/workspaces\/([^\/]+)\/messages\/([^\/]+)$/);
+		if (messageMatch) {
+			return handleMessageRoute(request, env, user, messageMatch[1], messageMatch[2], corsHeaders);
+		}
+
 		if (url.pathname === "/api/agent") {
 			// Handle POST requests for agent runs.
 			if (request.method === "POST") {
@@ -535,6 +541,46 @@ async function handleMessagesRoute(
 			const message = error instanceof Error ? error.message : "Failed to add message";
 			return Response.json(
 				{ error: message },
+				{ status: 400, headers: corsHeaders }
+			);
+		}
+	}
+
+	return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+}
+
+/**
+ * Handle /api/workspaces/:id/messages/:messageId routes
+ */
+async function handleMessageRoute(
+	request: Request,
+	env: Env,
+	user: AccessUser,
+	workspaceId: string,
+	messageId: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	if (request.method === "PUT" || request.method === "PATCH") {
+		try {
+			const body = await request.json() as {
+				content?: string;
+				steps?: {
+					type: "status" | "plan" | "tool_result" | "error";
+					content: string;
+					data?: unknown;
+				}[];
+			};
+			const success = await db.updateMessage(env.DB, user.id, workspaceId, messageId, body);
+			if (!success) {
+				return Response.json(
+					{ error: "Message not found" },
+					{ status: 404, headers: corsHeaders }
+				);
+			}
+			return Response.json({ success: true }, { headers: corsHeaders });
+		} catch (error) {
+			return Response.json(
+				{ error: "Failed to update message" },
 				{ status: 400, headers: corsHeaders }
 			);
 		}

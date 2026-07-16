@@ -157,6 +157,20 @@ export async function addMessage(
   return result.message;
 }
 
+export async function updateMessage(
+  workspaceId: string,
+  messageId: string,
+  data: {
+    content?: string;
+    steps?: MessageStep[];
+  }
+): Promise<void> {
+  await fetchApi(`/workspaces/${workspaceId}/messages/${messageId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
 // Skills API
 export async function getSkills(): Promise<Skill[]> {
   const data = await fetchApi<{ skills: Skill[] }>('/skills');

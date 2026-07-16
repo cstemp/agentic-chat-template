@@ -255,12 +255,18 @@ export function WorkspacePage() {
           }
         }
       }
+
+      // Persist the final message content to database
+      updateMessage(assistantMsg.id, {
+        content: fullContent,
+        steps: [...steps],
+      }, true); // true = persist to database
     } catch (error) {
       console.error('Error:', error);
       updateMessage(assistantMsg.id, {
         content: 'Sorry, there was an error processing your request.',
         steps: [{ type: 'error', content: 'Request failed' }],
-      });
+      }, true); // persist error state too
     } finally {
       setIsLoading(false);
     }
