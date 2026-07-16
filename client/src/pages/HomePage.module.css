@@ -1,0 +1,254 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.content {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mascot {
+  margin-bottom: 32px;
+}
+
+.mascotIcon {
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-primary));
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+
+.heading {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.subheading {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.form {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.inputWrapper {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  transition: border-color var(--transition-fast);
+}
+
+.inputWrapper:focus-within {
+  border-color: var(--accent-primary);
+}
+
+.input {
+  width: 100%;
+  min-height: 48px;
+  max-height: 200px;
+  resize: none;
+  font-size: 15px;
+  line-height: 1.5;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.inputActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.attachButton {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.attachButton:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.modelPicker {
+  position: relative;
+}
+
+.modelButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.modelButton:hover {
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+.modelDropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  min-width: 200px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 50;
+}
+
+.modelOption {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.modelOption:hover {
+  background-color: var(--bg-hover);
+}
+
+.modelOption.selected {
+  background-color: var(--accent-muted);
+}
+
+.modelName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.modelProvider {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sendButton {
+  margin-left: auto;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--accent-primary);
+  border-radius: var(--radius-md);
+  color: white;
+  transition: all var(--transition-fast);
+}
+
+.sendButton:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.sendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.toolConnections {
+  width: 100%;
+  max-width: 400px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.toolsHeading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.toolItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.toolIcon {
+  color: var(--text-muted);
+}
+
+.toolInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.toolName {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.toolDesc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.connectButton {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-primary);
+  background: transparent;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.connectButton:hover {
+  background-color: var(--accent-muted);
+}

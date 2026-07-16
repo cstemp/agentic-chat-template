@@ -10,7 +10,7 @@
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 	"assets": {
 		"binding": "ASSETS",
-		"directory": "./public"
+		"directory": "./dist"
 	},
 	"observability": {
 		"enabled": true
@@ -18,11 +18,30 @@
 	"ai": {
 		"binding": "AI"
 	},
+	// D1 database for workspace persistence
+	// Create with: npx wrangler d1 create agent-workspace-db
+	// Then run schema: npx wrangler d1 execute agent-workspace-db --file=./schema.sql
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "agent-workspace-db",
+			"database_id": "a87e4827-aad6-4ae0-a099-848749dd244e"
+		}
+	],
 	"vars": {
+		// Optional: AI Gateway ID for analytics, caching, and rate limiting.
+		// Create one at https://dash.cloudflare.com/?to=/:account/ai/ai-gateway
+		"AI_GATEWAY_ID": "",
+		// Optional: Set to "true" to bypass AI Gateway cache.
+		"AI_GATEWAY_SKIP_CACHE": "false",
+		// Optional: AI Gateway cache TTL in seconds.
+		"AI_GATEWAY_CACHE_TTL": "3600",
 		// Optional: set this to a remote MCP server endpoint that supports Streamable HTTP JSON-RPC.
 		"MCP_SERVER_URL": "",
 		// Optional: comma-separated MCP tool names the agent is allowed to call.
-		"MCP_TOOL_ALLOWLIST": ""
+		"MCP_TOOL_ALLOWLIST": "",
+		// Set to "true" for local development to allow X-Dev-User-Email header
+		"ALLOW_DEV_AUTH": "false"
 	},
 	"upload_source_maps": true
 }

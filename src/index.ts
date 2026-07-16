@@ -7,10 +7,36 @@
  * @license MIT
  */
 import { ChatMessage, Env } from "./types";
+import { getUser, AccessUser } from "./auth";
+import * as db from "./db";
 
-// Model ID for Workers AI model.
+// Default model ID for Workers AI.
 // https://developers.cloudflare.com/workers-ai/models/
-const MODEL_ID = "@cf/meta/llama-3.1-8b-instruct-fp8";
+const DEFAULT_MODEL_ID = "@cf/meta/llama-3.1-8b-instruct-fp8";
+
+// Supported models that can be selected from the frontend.
+const SUPPORTED_MODELS: Record<string, string> = {
+	"llama-3.1-8b-instruct": "@cf/meta/llama-3.1-8b-instruct-fp8",
+	"llama-3.1-70b-instruct": "@cf/meta/llama-3.1-70b-instruct",
+	"mistral-7b-instruct": "@cf/mistral/mistral-7b-instruct-v0.1",
+};
+
+/**
+ * Get AI Gateway options if configured.
+ */
+function getGatewayOptions(env: Env): { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number } } {
+	if (!env.AI_GATEWAY_ID) {
+		return {};
+	}
+
+	return {
+		gateway: {
+			id: env.AI_GATEWAY_ID,
+			skipCache: env.AI_GATEWAY_SKIP_CACHE === "true",
+			cacheTtl: env.AI_GATEWAY_CACHE_TTL ? parseInt(env.AI_GATEWAY_CACHE_TTL, 10) : 3600,
+		},
+	};
+}
 
 const MAX_TOOL_CALLS = 2;
 
@@ -102,29 +128,244 @@ export default {
 			return env.ASSETS.fetch(request);
 		}
 
-		// API Routes
+		// CORS headers for API routes
+		const corsHeaders = {
+			"Access-Control-Allow-Origin": "*",
+			"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+			"Access-Control-Allow-Headers": "Content-Type, Cf-Access-Jwt-Assertion, X-Dev-User-Email",
+		};
+
+		// Handle CORS preflight
+		if (request.method === "OPTIONS") {
+			return new Response(null, { headers: corsHeaders });
+		}
+
+		// Get user from Access JWT (or dev header for local testing)
+		const allowDevAuth = env.ALLOW_DEV_AUTH === "true";
+		const user = getUser(request, allowDevAuth);
+
+		// API Routes that don't require auth
 		if (url.pathname === "/api/skills") {
 			if (request.method === "GET") {
-				return Response.json({ skills: SKILLS });
+				// Load skills with their tools from markdown frontmatter
+				const skillsWithTools = await Promise.all(
+					SKILLS.map(async (skill) => {
+						try {
+							const skillUrl = new URL(skill.path, "https://skills.local");
+							const response = await env.ASSETS.fetch(new Request(skillUrl));
+							if (!response.ok) {
+								return { ...skill, tools: [] };
+							}
+							const markdown = await response.text();
+							const frontmatter = parseFrontmatter(markdown);
+							return {
+								...skill,
+								tools: parseFrontmatterList(frontmatter.tools),
+							};
+						} catch {
+							return { ...skill, tools: [] };
+						}
+					})
+				);
+				return Response.json({ skills: skillsWithTools }, { headers: corsHeaders });
 			}
 
-			return new Response("Method not allowed", { status: 405 });
+			return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+		}
+
+		// API route to get current user info
+		if (url.pathname === "/api/me") {
+			if (!user) {
+				return Response.json(
+					{ authenticated: false },
+					{ headers: corsHeaders }
+				);
+			}
+			return Response.json(
+				{
+					authenticated: true,
+					id: user.id,
+					email: user.email,
+					name: user.name,
+				},
+				{ headers: corsHeaders }
+			);
+		}
+
+		// All other API routes require authentication
+		if (!user) {
+			return Response.json(
+				{ error: "Unauthorized. Please authenticate via Cloudflare Access." },
+				{ status: 401, headers: corsHeaders }
+			);
+		}
+
+		// Ensure user exists in database
+		await db.ensureUser(env.DB, user);
+
+		// Workspace API routes
+		if (url.pathname === "/api/workspaces") {
+			return handleWorkspacesRoute(request, env, user, corsHeaders);
+		}
+
+		// Single workspace routes: /api/workspaces/:id
+		const workspaceMatch = url.pathname.match(/^\/api\/workspaces\/([^\/]+)$/);
+		if (workspaceMatch) {
+			return handleWorkspaceRoute(request, env, user, workspaceMatch[1], corsHeaders);
+		}
+
+		// Workspace messages: /api/workspaces/:id/messages
+		const messagesMatch = url.pathname.match(/^\/api\/workspaces\/([^\/]+)\/messages$/);
+		if (messagesMatch) {
+			return handleMessagesRoute(request, env, user, messagesMatch[1], corsHeaders);
 		}
 
 		if (url.pathname === "/api/agent") {
 			// Handle POST requests for agent runs.
 			if (request.method === "POST") {
-				return handleAgentRequest(request, env);
+				return handleAgentRequest(request, env, user, corsHeaders);
 			}
 
 			// Method not allowed for other request types
-			return new Response("Method not allowed", { status: 405 });
+			return new Response("Method not allowed", { status: 405, headers: corsHeaders });
 		}
 
 		// Handle 404 for unmatched routes
-		return new Response("Not found", { status: 404 });
+		return new Response("Not found", { status: 404, headers: corsHeaders });
 	},
 } satisfies ExportedHandler<Env>;
+
+/**
+ * Handle /api/workspaces routes
+ */
+async function handleWorkspacesRoute(
+	request: Request,
+	env: Env,
+	user: AccessUser,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	if (request.method === "GET") {
+		const workspaces = await db.getWorkspaces(env.DB, user.id);
+		return Response.json({ workspaces }, { headers: corsHeaders });
+	}
+
+	if (request.method === "POST") {
+		try {
+			const body = await request.json() as { title?: string; color?: string };
+			const workspace = await db.createWorkspace(env.DB, user.id, body);
+			return Response.json({ workspace }, { status: 201, headers: corsHeaders });
+		} catch (error) {
+			return Response.json(
+				{ error: "Failed to create workspace" },
+				{ status: 400, headers: corsHeaders }
+			);
+		}
+	}
+
+	return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+}
+
+/**
+ * Handle /api/workspaces/:id routes
+ */
+async function handleWorkspaceRoute(
+	request: Request,
+	env: Env,
+	user: AccessUser,
+	workspaceId: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	if (request.method === "GET") {
+		const workspace = await db.getWorkspace(env.DB, user.id, workspaceId);
+		if (!workspace) {
+			return Response.json(
+				{ error: "Workspace not found" },
+				{ status: 404, headers: corsHeaders }
+			);
+		}
+		return Response.json({ workspace }, { headers: corsHeaders });
+	}
+
+	if (request.method === "PUT" || request.method === "PATCH") {
+		try {
+			const body = await request.json() as Partial<{
+				title: string;
+				color: string;
+				selectedModel: string;
+				selectedSkill: string;
+				isFavorite: boolean;
+			}>;
+			const success = await db.updateWorkspace(env.DB, user.id, workspaceId, body);
+			if (!success) {
+				return Response.json(
+					{ error: "Workspace not found" },
+					{ status: 404, headers: corsHeaders }
+				);
+			}
+			return Response.json({ success: true }, { headers: corsHeaders });
+		} catch (error) {
+			return Response.json(
+				{ error: "Failed to update workspace" },
+				{ status: 400, headers: corsHeaders }
+			);
+		}
+	}
+
+	if (request.method === "DELETE") {
+		const success = await db.deleteWorkspace(env.DB, user.id, workspaceId);
+		if (!success) {
+			return Response.json(
+				{ error: "Workspace not found" },
+				{ status: 404, headers: corsHeaders }
+			);
+		}
+		return Response.json({ success: true }, { headers: corsHeaders });
+	}
+
+	return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+}
+
+/**
+ * Handle /api/workspaces/:id/messages routes
+ */
+async function handleMessagesRoute(
+	request: Request,
+	env: Env,
+	user: AccessUser,
+	workspaceId: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	if (request.method === "POST") {
+		try {
+			const body = await request.json() as {
+				role: "user" | "assistant";
+				content: string;
+				attachments?: {
+					id: string;
+					name: string;
+					type: "image" | "document" | "other";
+					size: number;
+					preview?: string;
+				}[];
+				steps?: {
+					type: "status" | "plan" | "tool_result" | "error";
+					content: string;
+					data?: unknown;
+				}[];
+			};
+			const message = await db.addMessage(env.DB, user.id, workspaceId, body);
+			return Response.json({ message }, { status: 201, headers: corsHeaders });
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Failed to add message";
+			return Response.json(
+				{ error: message },
+				{ status: 400, headers: corsHeaders }
+			);
+		}
+	}
+
+	return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+}
 
 /**
  * Handles agent workflow requests.
@@ -132,23 +373,34 @@ export default {
 async function handleAgentRequest(
 	request: Request,
 	env: Env,
+	user: AccessUser,
+	corsHeaders: Record<string, string>,
 ): Promise<Response> {
 	let messages: ChatMessage[];
 	let selectedSkillName: string | undefined;
+	let selectedModelId: string;
 
 	try {
 		const body = (await request.json()) as {
 			messages: ChatMessage[];
 			skill?: string;
+			model?: string;
 		};
 		messages = Array.isArray(body.messages) ? body.messages : [];
 		selectedSkillName = typeof body.skill === "string" ? body.skill : undefined;
+		
+		// Map frontend model ID to Workers AI model ID
+		const requestedModel = typeof body.model === "string" ? body.model : "";
+		selectedModelId = SUPPORTED_MODELS[requestedModel] || DEFAULT_MODEL_ID;
 	} catch {
 		return new Response(JSON.stringify({ error: "Invalid JSON request body" }), {
 			status: 400,
-			headers: { "content-type": "application/json" },
+			headers: { ...corsHeaders, "content-type": "application/json" },
 		});
 	}
+
+	// Capture modelId for use in the stream closure
+	const modelId = selectedModelId;
 
 	const stream = new ReadableStream({
 		async start(controller) {
@@ -166,7 +418,7 @@ async function handleAgentRequest(
 					message: "Planning the workflow",
 				});
 
-				const plan = await createPlan(messages, env, skill);
+				const plan = await createPlan(messages, env, skill, modelId);
 				sendAgentEvent(controller, {
 					type: "plan",
 					thought: plan.thought,
@@ -198,7 +450,7 @@ async function handleAgentRequest(
 					message: "Composing final answer",
 				});
 				try {
-					await streamFinalAnswer(messages, plan, toolResults, env, controller, skill);
+					await streamFinalAnswer(messages, plan, toolResults, env, controller, skill, modelId);
 				} catch (error) {
 					console.error("Error streaming Workers AI final answer:", error);
 					sendAgentEvent(controller, {
@@ -236,6 +488,7 @@ async function createPlan(
 	messages: ChatMessage[],
 	env: Env,
 	skill?: Skill,
+	modelId: string = DEFAULT_MODEL_ID,
 ): Promise<AgentPlan> {
 	const plannerMessages: ChatMessage[] = [
 		{ role: "system", content: buildPlannerPrompt(env, skill) },
@@ -243,10 +496,14 @@ async function createPlan(
 	];
 
 	try {
-		const result = await env.AI.run<typeof MODEL_ID>(MODEL_ID, {
-			messages: plannerMessages,
-			max_tokens: 512,
-		});
+		const result = await env.AI.run(
+			modelId as Parameters<typeof env.AI.run>[0],
+			{
+				messages: plannerMessages,
+				max_tokens: 512,
+			},
+			getGatewayOptions(env),
+		);
 
 		const text = extractTextGenerationResponse(result);
 		return parsePlan(text, messages, skill);
@@ -267,6 +524,7 @@ async function streamFinalAnswer(
 	env: Env,
 	controller: ReadableStreamDefaultController,
 	skill?: Skill,
+	modelId: string = DEFAULT_MODEL_ID,
 ): Promise<void> {
 	const finalMessages: ChatMessage[] = [
 		{
@@ -282,22 +540,15 @@ async function streamFinalAnswer(
 		},
 	];
 
-	const aiStream = await env.AI.run<typeof MODEL_ID>(
-		MODEL_ID,
+	const aiStream = (await env.AI.run(
+		modelId as Parameters<typeof env.AI.run>[0],
 		{
 			messages: finalMessages,
 			max_tokens: 1024,
 			stream: true,
 		} satisfies AiTextGenerationInput & { stream: true },
-		{
-			// Uncomment to use AI Gateway.
-			// gateway: {
-			//   id: "YOUR_GATEWAY_ID", // Replace with your AI Gateway ID
-			//   skipCache: false,      // Set to true to bypass cache
-			//   cacheTtl: 3600,        // Cache time-to-live in seconds
-			// },
-		},
-	);
+		getGatewayOptions(env),
+	)) as unknown as ReadableStream;
 
 	await forwardWorkersAiStream(aiStream, controller);
 }

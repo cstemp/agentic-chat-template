@@ -1,34 +1,43 @@
-# Agent Workflow Template
+# Agent Workspace Template
 
-A bare-bones agentic workflow template powered by Cloudflare Workers AI. It demonstrates the core loop used by many AI agents: plan, call allowlisted tools, inspect results, and stream a final answer.
+A full-featured agentic workspace template running entirely on Cloudflare's developer platform. Build AI-powered productivity tools with workspace management, real-time streaming, user authentication via Cloudflare Access, and persistent storage with D1.
 
 <!-- dash-content-start -->
 
-## Demo
+## Overview
 
-This template demonstrates how to build a minimal agentic workflow using Cloudflare Workers AI with streamed progress. It features:
+This template provides a complete workspace-based agent interface that runs 100% on Cloudflare infrastructure:
 
-- Planner step that asks the model which tools to use
-- Reusable markdown skills for repeatable workflow recipes
-- Allowlisted server-side tools with demo results
-- Optional remote MCP tool bridge
-- Real-time status, tool output, and final answer streaming using Server-Sent Events (SSE)
-- Easy customization of models, prompts, and tools
-- AI Gateway integration support
-- Clean, responsive UI that works on mobile and desktop
+- **Cloudflare Workers** - Serverless compute for the API and frontend
+- **Workers AI** - LLM inference for planning and responses
+- **AI Gateway** - Analytics, caching, and rate limiting for AI requests
+- **D1** - SQLite database for workspace and message persistence
+- **Cloudflare Access** - User authentication via JWT tokens
+- **Workers Assets** - Static file serving for the React frontend
 
 ## Features
 
-- Simple and responsive workflow interface
-- Skill picker for reusable agent workflows
-- Server-Sent Events (SSE) for streaming agent progress
-- Demo tools for runbook search, account lookup, and task creation
-- Optional MCP server connection through a single allowlisted tool bridge
-- Cloudflare Workers AI LLM support
-- TypeScript and Cloudflare Workers stack
-- Mobile-friendly design
-- Built-in observability logging
+- **Workspace Management**: Create, organize, and persist multiple workspaces per user
+- **Real-time Streaming**: Server-Sent Events for live agent progress and responses
+- **Agentic Workflow**: Plan, call tools, inspect results, generate answers
+- **User Authentication**: Cloudflare Access JWT integration for user identity
+- **Dark/Light Themes**: Modern UI with full theme support
+- **Model Selection**: Choose between available Workers AI models
+- **File Attachments**: Attach images and documents to messages
+- **Skills System**: Reusable markdown workflow recipes
+- **MCP Integration**: Optional remote Model Context Protocol tool bridge
+
 <!-- dash-content-end -->
+
+## Cloudflare Infrastructure
+
+| Service | Purpose |
+|---------|---------|
+| **Workers** | API endpoints, SSE streaming, static assets |
+| **Workers AI** | LLM inference (Llama, Mistral, etc.) |
+| **AI Gateway** | Request logging, caching, rate limiting |
+| **D1** | User data, workspaces, messages persistence |
+| **Access** | Authentication, user identity via JWT |
 
 ## Getting Started
 
@@ -36,7 +45,7 @@ This template demonstrates how to build a minimal agentic workflow using Cloudfl
 
 - [Node.js](https://nodejs.org/) (v18 or newer)
 - A Cloudflare account with Workers AI access
-- Authentication with Wrangler: run `npx wrangler login` (Wrangler is included as a dev dependency)
+- Wrangler CLI: `npx wrangler login`
 
 ### Installation
 
@@ -45,234 +54,229 @@ This template demonstrates how to build a minimal agentic workflow using Cloudfl
    ```bash
    git clone https://github.com/cstemp/agentic-chat-template
    cd agent-workflow-template
-   ```
-
-2. Install dependencies:
-
-   ```bash
    npm install
    ```
 
+2. Create the D1 database:
+
+   ```bash
+   npx wrangler d1 create agent-workspace-db
+   ```
+
+3. Copy the database ID from the output and update `wrangler.jsonc`:
+
+   ```jsonc
+   "d1_databases": [
+     {
+       "binding": "DB",
+       "database_name": "agent-workspace-db",
+       "database_id": "YOUR_DATABASE_ID"  // <-- paste here
+     }
+   ]
+   ```
+
+4. Initialize the database schema:
+
+   ```bash
+   npx wrangler d1 execute agent-workspace-db --file=./schema.sql
+   ```
+
+5. (Optional) Create an AI Gateway for analytics:
+
+   - Go to [AI Gateway Dashboard](https://dash.cloudflare.com/?to=/:account/ai/ai-gateway)
+   - Create a new gateway
+   - Copy the Gateway ID to `wrangler.jsonc`:
+     ```jsonc
+     "vars": {
+       "AI_GATEWAY_ID": "your-gateway-id"
+     }
+     ```
+
+6. (Optional) Set up Cloudflare Access:
+
+   - Go to [Access Dashboard](https://one.dash.cloudflare.com/)
+   - Create an application for your Worker's domain
+   - Configure identity providers (Google, GitHub, etc.)
+   - Users will automatically be authenticated via JWT
+
 ### Development
 
-Start a local development server:
+For local development without Access:
+
+1. Enable dev auth in `wrangler.jsonc`:
+   ```jsonc
+   "vars": {
+     "ALLOW_DEV_AUTH": "true"
+   }
+   ```
+
+2. Start the dev server:
+   ```bash
+   npm run dev
+   ```
+
+3. The app will use `X-Dev-User-Email` header for authentication locally.
+
+For frontend-only development with hot reload:
 
 ```bash
-npm run dev
+# Terminal 1: Start the worker
+npm run dev:worker
+
+# Terminal 2: Start Vite dev server
+npm run dev:client
 ```
 
-This will start a local server at http://localhost:8787.
-
-> **Note:** Workers AI requests go to your Cloudflare account even during local development. This incurs usage charges. See [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
-
 ### Deployment
-
-Deploy to Cloudflare Workers:
 
 ```bash
 npm run deploy
 ```
 
-The deploy command will output your Worker's URL (e.g., `https://agent-workflow-template.<your-subdomain>.workers.dev`).
-
-### Monitor
-
-View real-time logs associated with any deployed Worker:
-
-```bash
-npx wrangler tail
-```
+After deploying, protect your Worker URL with Cloudflare Access to require authentication.
 
 ## Project Structure
 
 ```
 /
-├── public/             # Static assets
-│   ├── index.html      # Agent workflow UI HTML
-│   ├── chat.js         # Agent workflow frontend script
-│   └── skills/         # Public markdown skill recipes
+├── client/                    # React frontend (Vite + TypeScript)
+│   ├── src/
+│   │   ├── App.tsx            # Main app with routing
+│   │   ├── lib/api.ts         # API client
+│   │   ├── hooks/
+│   │   │   └── useWorkspaces.ts  # Workspace state management
+│   │   ├── components/        # Reusable UI components
+│   │   └── pages/             # Page components
 ├── src/
-│   ├── index.ts        # Main Worker entry point
-│   └── types.ts        # TypeScript type definitions
-├── wrangler.jsonc      # Cloudflare Worker configuration
-├── tsconfig.json       # TypeScript configuration
-└── README.md           # This documentation
+│   ├── index.ts               # Worker entry point & API routes
+│   ├── auth.ts                # Cloudflare Access JWT handling
+│   ├── db.ts                  # D1 database operations
+│   └── types.ts               # TypeScript types
+├── public/skills/             # Markdown skill recipes
+├── schema.sql                 # D1 database schema
+├── wrangler.jsonc             # Cloudflare Worker config
+└── vite.config.ts             # Vite configuration
 ```
 
-## How It Works
+## API Endpoints
 
-### Backend
+### Authentication
+All API endpoints (except `/api/skills` and `/api/me`) require authentication via Cloudflare Access JWT.
 
-The backend is built with Cloudflare Workers and uses Workers AI for planning and response generation. The main components are:
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/me` | GET | Get current user info |
+| `/api/skills` | GET | List available skills |
+| `/api/workspaces` | GET | List user's workspaces |
+| `/api/workspaces` | POST | Create new workspace |
+| `/api/workspaces/:id` | GET | Get workspace with messages |
+| `/api/workspaces/:id` | PUT | Update workspace |
+| `/api/workspaces/:id` | DELETE | Delete workspace |
+| `/api/workspaces/:id/messages` | POST | Add message to workspace |
+| `/api/agent` | POST | Run agent (streaming SSE) |
 
-1. **Skill Manifest** (`/api/skills`): Returns the list of available skills for the UI picker.
-2. **API Endpoint** (`/api/agent`): Accepts POST requests with chat-style messages and an optional selected skill.
-3. **Planning**: Loads the selected skill, then asks Workers AI to return a JSON plan with up to two tool calls.
-4. **Tool Execution**: Runs only allowlisted server-side tools defined in `src/index.ts`.
-5. **Final Answer**: Sends the skill, plan, and tool results back to Workers AI, then streams the final answer.
-6. **Workers AI Binding**: Connects to Cloudflare's AI service via the Workers AI binding.
+## Configuration
 
-If MCP is configured, the planner can also use `call_mcp_tool` to call an allowlisted tool exposed by a remote MCP server.
+### Environment Variables
 
-### Frontend
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AI_GATEWAY_ID` | No | AI Gateway ID for analytics/caching |
+| `AI_GATEWAY_SKIP_CACHE` | No | Set to "true" to bypass cache |
+| `AI_GATEWAY_CACHE_TTL` | No | Cache TTL in seconds (default: 3600) |
+| `MCP_SERVER_URL` | No | Remote MCP server endpoint |
+| `MCP_TOOL_ALLOWLIST` | No | Comma-separated allowed MCP tools |
+| `ALLOW_DEV_AUTH` | No | Set to "true" for local dev auth |
 
-The frontend is a simple HTML/CSS/JavaScript application that:
-
-1. Presents a workflow prompt interface.
-2. Loads available skills from `/api/skills`.
-3. Sends user requests and the selected skill to `/api/agent`.
-4. Displays planning, status updates, tool results, and the streamed final answer.
-5. Maintains chat history on the client side.
-
-## Example Prompt
-
-Try this locally after running `npm run dev`:
-
-```text
-Triage an AI Gateway rollout for account 123 and create a follow-up task if anything is missing.
-```
-
-The demo tools return mock data. They are intentionally small so you can replace them with real integrations.
-
-## Customization
-
-### Adding Reusable Skills
-
-Skills are lightweight markdown workflow recipes. Think of them as reusable prompt + tool templates. They are intentionally simple so the template stays easy to understand.
-
-The starter skills live in `public/skills/`:
-
-- `triage.md`
-- `customer-research.md`
-
-Each skill has YAML-style frontmatter plus instructions:
-
-```markdown
----
-name: triage
-description: Triage an operational issue, inspect context, and recommend next steps.
-tools:
-  - search_runbook
-  - lookup_account
----
-
-# Triage Skill
-
-Use this skill when the user wants help investigating an operational issue.
-```
-
-To add a skill:
-
-1. Create a new markdown file under `public/skills/` with YAML frontmatter.
-2. Add it to the `SKILLS` array in `src/index.ts`.
-3. List the tools the skill can use in its `tools` frontmatter (these filter what the model can call).
-4. Run `npm run check` to verify TypeScript compiles and the Worker builds correctly.
-
-When a skill declares tools, the Worker filters the model's plan to those tools before execution. For MCP tools, use the `mcp:<tool-name>` form and make sure the same tool name is also present in `MCP_TOOL_ALLOWLIST`:
-
-```markdown
----
-name: docs-research
-description: Search product docs through a remote MCP server.
-tools:
-  - mcp:search_docs
----
-```
-
-Skill files in this template are public static assets. Do not put secrets, private tokens, or customer-specific confidential data in them. For production systems, store private context in D1, R2, KV, Workers AI Vectorize, or behind authenticated MCP tools.
-
-### Changing the Model
-
-To use a different AI model, update the `MODEL_ID` constant in `src/index.ts`. You can find available models in the [Cloudflare Workers AI documentation](https://developers.cloudflare.com/workers-ai/models/).
-
-### Using AI Gateway
-
-The template includes commented code for AI Gateway integration, which provides additional capabilities like rate limiting, caching, and analytics.
-
-To enable AI Gateway:
-
-1. [Create an AI Gateway](https://dash.cloudflare.com/?to=/:account/ai/ai-gateway) in your Cloudflare dashboard
-2. Uncomment the gateway configuration in `src/index.ts`
-3. Replace `YOUR_GATEWAY_ID` with your actual AI Gateway ID
-4. Configure other gateway options as needed:
-   - `skipCache`: Set to `true` to bypass gateway caching
-   - `cacheTtl`: Set the cache time-to-live in seconds
-
-Learn more about [AI Gateway](https://developers.cloudflare.com/ai-gateway/).
-
-### Adding Real Tools
-
-The sample tools live in `src/index.ts`:
-
-- `search_runbook`
-- `lookup_account`
-- `create_follow_up_task`
-
-Replace these with your own calls to Cloudflare services or external systems. Common next steps include:
-
-- Query account or customer state from D1, KV, R2, or a third-party API
-- Start long-running work with Cloudflare Workflows or Queues
-- Coordinate per-user or per-agent state with Durable Objects
-- Route model traffic through AI Gateway for logging, caching, rate limiting, and analytics
-
-Keep tool execution server-side and allowlisted. Do not let the model call arbitrary URLs, run arbitrary code, or choose unvalidated operations.
-
-### Connecting MCP Servers
-
-This template includes an optional MCP bridge for remote MCP servers that support [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) transport. MCP is disabled by default.
-
-To enable MCP:
-
-1. Set the remote MCP endpoint in `wrangler.jsonc`:
-
-```jsonc
-"vars": {
-	"MCP_SERVER_URL": "https://your-mcp-server.example.com/mcp",
-	"MCP_TOOL_ALLOWLIST": "search_docs,create_ticket"
-}
-```
-
-2. If your MCP server requires bearer auth, store the token as a secret:
+### Secrets
 
 ```bash
+# MCP server authentication (if needed)
 npx wrangler secret put MCP_AUTH_TOKEN
 ```
 
-3. Ask the agent to use one of the allowlisted MCP tools:
+## Customization
 
-```text
-Search docs for the latest AI Gateway caching guidance and summarize the rollout steps.
+### Adding Models
+
+Update the `SUPPORTED_MODELS` map in `src/index.ts`:
+
+```typescript
+const SUPPORTED_MODELS: Record<string, string> = {
+  "llama-3.1-8b-instruct": "@cf/meta/llama-3.1-8b-instruct-fp8",
+  "llama-3.1-70b-instruct": "@cf/meta/llama-3.1-70b-instruct",
+  "mistral-7b-instruct": "@cf/mistral/mistral-7b-instruct-v0.1",
+  // Add more models here
+};
 ```
 
-The Worker sends MCP tool calls as JSON-RPC `tools/call` requests:
+Also update the frontend model list in `client/src/pages/HomePage.tsx` and `WorkspacePage.tsx`.
 
-```json
-{
-	"jsonrpc": "2.0",
-	"id": "generated-request-id",
-	"method": "tools/call",
-	"params": {
-		"name": "search_docs",
-		"arguments": {}
-	}
-}
+### Adding Skills
+
+1. Create a markdown file in `public/skills/`:
+
+   ```markdown
+   ---
+   name: my-skill
+   description: Description of what this skill does.
+   tools:
+     - search_runbook
+     - lookup_account
+   ---
+
+   # My Skill
+
+   Instructions for the agent...
+   ```
+
+2. Add the skill to `SKILLS` array in `src/index.ts`
+
+### Adding Tools
+
+1. Define the tool function in `src/index.ts`
+2. Add it to the `runTool` switch statement
+3. Update `BASE_PLANNER_PROMPT` with tool description
+4. Add to relevant skills' `tools` frontmatter
+
+### Database Schema
+
+The D1 schema includes:
+
+- `users` - User accounts (populated from Access JWT)
+- `workspaces` - User workspaces
+- `messages` - Chat messages
+- `message_attachments` - File attachments
+- `message_steps` - Agent steps (plans, tool results, etc.)
+
+To modify, edit `schema.sql` and re-run:
+```bash
+npx wrangler d1 execute agent-workspace-db --file=./schema.sql
 ```
 
-The model never receives direct network access. It can only request the local `call_mcp_tool` bridge, and the Worker validates the requested MCP tool name against `MCP_TOOL_ALLOWLIST` before making the outbound request.
+## Scripts
 
-For a production app, consider adding per-user authorization, audit logs, input schemas for each MCP tool, timeout handling, and explicit confirmation before tools perform writes.
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Build frontend + start Wrangler |
+| `npm run dev:client` | Start Vite dev server only |
+| `npm run dev:worker` | Start Wrangler only |
+| `npm run build:client` | Build React to `/dist` |
+| `npm run deploy` | Build + deploy to Cloudflare |
+| `npm run check` | Type-check + dry-run deploy |
 
-### Modifying the System Prompt
+## Security Considerations
 
-The default agent system prompt and planner prompt can be changed by updating `SYSTEM_PROMPT` and `BASE_PLANNER_PROMPT` in `src/index.ts`.
-
-### Styling
-
-The UI styling is contained in the `<style>` section of `public/index.html`. You can modify the CSS variables at the top to quickly change the color scheme.
+- All API routes require Cloudflare Access authentication (except `/api/skills`, `/api/me`)
+- Tool execution is server-side and allowlisted
+- MCP tools are validated against `MCP_TOOL_ALLOWLIST`
+- User data is isolated by user ID from Access JWT
+- Dev auth (`X-Dev-User-Email`) is disabled by default
 
 ## Resources
 
-- [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
-- [Cloudflare Workers AI Documentation](https://developers.cloudflare.com/workers-ai/)
-- [Workers AI Models](https://developers.cloudflare.com/workers-ai/models/)
-# agentic-chat-template
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
+- [Workers AI](https://developers.cloudflare.com/workers-ai/)
+- [AI Gateway](https://developers.cloudflare.com/ai-gateway/)
+- [D1 Database](https://developers.cloudflare.com/d1/)
+- [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/)

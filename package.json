@@ -20,19 +20,32 @@
 		"@cloudflare/vitest-pool-workers": "^0.16.17",
 		"@cloudflare/workers-types": "^4.20260507.1",
 		"@types/node": "24.10.1",
+		"@types/react": "^19.2.17",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.3",
 		"@vitest/runner": "^4.1.9",
 		"@vitest/snapshot": "^4.1.9",
 		"typescript": "5.9.3",
+		"vite": "^8.1.5",
 		"vitest": "^4.1.9",
 		"wrangler": "^4.102.0"
 	},
 	"private": true,
 	"scripts": {
 		"cf-typegen": "wrangler types",
-		"check": "tsc --noEmit && wrangler deploy --dry-run",
-		"deploy": "wrangler deploy",
-		"dev": "wrangler dev",
-		"start": "wrangler dev",
+		"check": "tsc --noEmit && npm run build:client && wrangler deploy --dry-run",
+		"build:client": "vite build",
+		"dev:client": "vite",
+		"dev:worker": "wrangler dev",
+		"dev": "npm run build:client && wrangler dev",
+		"deploy": "npm run build:client && wrangler deploy",
+		"start": "npm run dev",
 		"test": "vitest --passWithNoTests"
+	},
+	"dependencies": {
+		"lucide-react": "^1.24.0",
+		"react": "^19.2.7",
+		"react-dom": "^19.2.7",
+		"react-router-dom": "^7.18.1"
 	}
 }
