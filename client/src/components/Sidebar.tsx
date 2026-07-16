@@ -31,10 +31,19 @@ export function Sidebar({ theme, toggleTheme }: SidebarProps) {
   const navigate = useNavigate();
   const { workspaces, favorites, recent, createWorkspace } = useWorkspaces();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
 
-  const handleNewWorkspace = () => {
-    const workspace = createWorkspace();
-    navigate(`/workspace/${workspace.id}`);
+  const handleNewWorkspace = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      const workspace = await createWorkspace();
+      navigate(`/workspace/${workspace.id}`);
+    } catch (error) {
+      console.error('Failed to create workspace:', error);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const filteredRecent = recent.filter((ws) =>

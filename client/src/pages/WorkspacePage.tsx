@@ -10,6 +10,7 @@ import {
   File as FileIcon,
 } from 'lucide-react';
 import { useWorkspace, Message, AgentStep, MessageAttachment } from '../hooks/useWorkspaces';
+import { useModels, Model } from '../hooks/useModels';
 import { runAgent } from '../lib/api';
 import { FileAttachment, AttachedFile } from '../components/FileAttachment';
 import { LoadingSpinner } from '../components/LoadingSpinner';
@@ -19,17 +20,6 @@ interface LocationState {
   initialMessage?: string;
   selectedModel?: string;
 }
-
-interface Model {
-  id: string;
-  name: string;
-}
-
-const AVAILABLE_MODELS: Model[] = [
-  { id: 'llama-3.1-8b-instruct', name: 'Llama 3.1 8B' },
-  { id: 'llama-3.1-70b-instruct', name: 'Llama 3.1 70B' },
-  { id: 'mistral-7b-instruct', name: 'Mistral 7B' },
-];
 
 export function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
@@ -45,14 +35,23 @@ export function WorkspacePage() {
     toggleFavorite,
   } = useWorkspace(id);
 
+  const { models, defaultModel } = useModels();
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<Model>(
-    AVAILABLE_MODELS.find((m) => m.id === state?.selectedModel) ||
-      AVAILABLE_MODELS[0]
-  );
+  const [selectedModel, setSelectedModel] = useState<Model>(defaultModel);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+
+  // Update selected model when models load, respecting state if provided
+  useEffect(() => {
+    if (models.length > 0) {
+      const stateModel = state?.selectedModel
+        ? models.find((m) => m.id === state.selectedModel)
+        : null;
+      setSelectedModel(stateModel || defaultModel);
+    }
+  }, [models, defaultModel, state?.selectedModel]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -359,7 +358,7 @@ export function WorkspacePage() {
                 </button>
                 {showModelPicker && (
                   <div className={styles.modelDropdown}>
-                    {AVAILABLE_MODELS.map((model) => (
+                    {models.map((model) => (
                       <button
                         key={model.id}
                         type="button"
@@ -371,7 +370,8 @@ export function WorkspacePage() {
                           setShowModelPicker(false);
                         }}
                       >
-                        {model.name}
+                        <span className={styles.modelName}>{model.name}</span>
+                        <span className={styles.modelProvider}>{model.provider}</span>
                       </button>
                     ))}
                   </div>

@@ -2,24 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Send, Plus, ChevronDown, Zap, GitBranch } from 'lucide-react';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useModels } from '../hooks/useModels';
 import styles from './HomePage.module.css';
 
 interface Skill {
   name: string;
   description: string;
 }
-
-interface Model {
-  id: string;
-  name: string;
-  provider: string;
-}
-
-const AVAILABLE_MODELS: Model[] = [
-  { id: 'llama-3.1-8b-instruct', name: 'Llama 3.1 8B', provider: 'Meta' },
-  { id: 'llama-3.1-70b-instruct', name: 'Llama 3.1 70B', provider: 'Meta' },
-  { id: 'mistral-7b-instruct', name: 'Mistral 7B', provider: 'Mistral' },
-];
 
 const TOOL_CONNECTIONS = [
   {
@@ -34,10 +23,18 @@ const TOOL_CONNECTIONS = [
 export function HomePage() {
   const navigate = useNavigate();
   const { createWorkspace } = useWorkspaces();
+  const { models, defaultModel } = useModels();
   const [input, setInput] = useState('');
-  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [skills, setSkills] = useState<Skill[]>([]);
+
+  // Update selected model when models load
+  useEffect(() => {
+    if (defaultModel && selectedModel.id !== defaultModel.id) {
+      setSelectedModel(defaultModel);
+    }
+  }, [defaultModel]);
 
   useEffect(() => {
     // Load skills from API
@@ -47,15 +44,23 @@ export function HomePage() {
       .catch(console.error);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  const [isCreating, setIsCreating] = useState(false);
 
-    // Create a new workspace and navigate to it with the initial message
-    const workspace = createWorkspace();
-    navigate(`/workspace/${workspace.id}`, {
-      state: { initialMessage: input.trim(), selectedModel: selectedModel.id },
-    });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isCreating) return;
+
+    setIsCreating(true);
+    try {
+      // Create a new workspace and navigate to it with the initial message
+      const workspace = await createWorkspace();
+      navigate(`/workspace/${workspace.id}`, {
+        state: { initialMessage: input.trim(), selectedModel: selectedModel.id },
+      });
+    } catch (error) {
+      console.error('Failed to create workspace:', error);
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -105,7 +110,7 @@ export function HomePage() {
                 </button>
                 {showModelPicker && (
                   <div className={styles.modelDropdown}>
-                    {AVAILABLE_MODELS.map((model) => (
+                    {models.map((model) => (
                       <button
                         key={model.id}
                         type="button"
@@ -128,7 +133,7 @@ export function HomePage() {
               <button
                 type="submit"
                 className={styles.sendButton}
-                disabled={!input.trim()}
+                disabled={!input.trim() || isCreating}
               >
                 <Send size={18} />
               </button>

@@ -15,11 +15,149 @@ import * as db from "./db";
 const DEFAULT_MODEL_ID = "@cf/meta/llama-3.1-8b-instruct-fp8";
 
 // Supported models that can be selected from the frontend.
-const SUPPORTED_MODELS: Record<string, string> = {
-	"llama-3.1-8b-instruct": "@cf/meta/llama-3.1-8b-instruct-fp8",
-	"llama-3.1-70b-instruct": "@cf/meta/llama-3.1-70b-instruct",
-	"mistral-7b-instruct": "@cf/mistral/mistral-7b-instruct-v0.1",
-};
+// Maps frontend ID -> Workers AI model ID
+// See: https://developers.cloudflare.com/workers-ai/models/
+const SUPPORTED_MODELS: {
+	id: string;
+	workersId: string;
+	name: string;
+	provider: string;
+	description?: string;
+}[] = [
+	// Meta Llama models
+	{
+		id: "llama-3.3-70b-instruct-fp8-fast",
+		workersId: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+		name: "Llama 3.3 70B Instruct",
+		provider: "Meta",
+		description: "Latest Llama, fast inference",
+	},
+	{
+		id: "llama-3.1-8b-instruct",
+		workersId: "@cf/meta/llama-3.1-8b-instruct-fp8",
+		name: "Llama 3.1 8B Instruct",
+		provider: "Meta",
+		description: "Fast and efficient",
+	},
+	{
+		id: "llama-3.1-70b-instruct",
+		workersId: "@cf/meta/llama-3.1-70b-instruct",
+		name: "Llama 3.1 70B Instruct",
+		provider: "Meta",
+		description: "High capability",
+	},
+	{
+		id: "llama-3-8b-instruct",
+		workersId: "@cf/meta/llama-3-8b-instruct",
+		name: "Llama 3 8B Instruct",
+		provider: "Meta",
+	},
+	{
+		id: "llama-2-7b-chat-fp16",
+		workersId: "@cf/meta/llama-2-7b-chat-fp16",
+		name: "Llama 2 7B Chat",
+		provider: "Meta",
+	},
+	// Mistral models
+	{
+		id: "mistral-7b-instruct-v0.2",
+		workersId: "@cf/mistral/mistral-7b-instruct-v0.2",
+		name: "Mistral 7B Instruct v0.2",
+		provider: "Mistral AI",
+		description: "Latest Mistral 7B",
+	},
+	{
+		id: "mistral-7b-instruct",
+		workersId: "@cf/mistral/mistral-7b-instruct-v0.1",
+		name: "Mistral 7B Instruct v0.1",
+		provider: "Mistral AI",
+	},
+	// Qwen models
+	{
+		id: "qwen1.5-14b-chat-awq",
+		workersId: "@cf/qwen/qwen1.5-14b-chat-awq",
+		name: "Qwen 1.5 14B Chat",
+		provider: "Alibaba",
+		description: "Strong multilingual",
+	},
+	{
+		id: "qwen1.5-7b-chat-awq",
+		workersId: "@cf/qwen/qwen1.5-7b-chat-awq",
+		name: "Qwen 1.5 7B Chat",
+		provider: "Alibaba",
+	},
+	{
+		id: "qwen1.5-1.8b-chat",
+		workersId: "@cf/qwen/qwen1.5-1.8b-chat",
+		name: "Qwen 1.5 1.8B Chat",
+		provider: "Alibaba",
+		description: "Ultra fast",
+	},
+	// Google Gemma models
+	{
+		id: "gemma-7b-it",
+		workersId: "@hf/google/gemma-7b-it",
+		name: "Gemma 7B Instruct",
+		provider: "Google",
+	},
+	{
+		id: "gemma-2b-it",
+		workersId: "@cf/google/gemma-2b-it-lora",
+		name: "Gemma 2B Instruct",
+		provider: "Google",
+		description: "Lightweight",
+	},
+	// Microsoft Phi models
+	{
+		id: "phi-2",
+		workersId: "@cf/microsoft/phi-2",
+		name: "Phi-2",
+		provider: "Microsoft",
+		description: "Small but capable",
+	},
+	// DeepSeek models
+	{
+		id: "deepseek-coder-6.7b-instruct",
+		workersId: "@hf/thebloke/deepseek-coder-6.7b-instruct-awq",
+		name: "DeepSeek Coder 6.7B",
+		provider: "DeepSeek",
+		description: "Code specialized",
+	},
+	// Openchat
+	{
+		id: "openchat-3.5",
+		workersId: "@cf/openchat/openchat-3.5-0106",
+		name: "OpenChat 3.5",
+		provider: "OpenChat",
+	},
+	// Hermes
+	{
+		id: "hermes-2-pro-mistral-7b",
+		workersId: "@hf/nousresearch/hermes-2-pro-mistral-7b",
+		name: "Hermes 2 Pro Mistral 7B",
+		provider: "Nous Research",
+		description: "Function calling",
+	},
+	// TinyLlama
+	{
+		id: "tinyllama-1.1b-chat",
+		workersId: "@cf/tinyllama/tinyllama-1.1b-chat-v1.0",
+		name: "TinyLlama 1.1B Chat",
+		provider: "TinyLlama",
+		description: "Ultra lightweight",
+	},
+	// SQL specialized
+	{
+		id: "sqlcoder-7b",
+		workersId: "@cf/defog/sqlcoder-7b-2",
+		name: "SQLCoder 7B",
+		provider: "Defog",
+		description: "SQL generation",
+	},
+];
+
+// Create a lookup map for quick model resolution
+const MODEL_LOOKUP = new Map(SUPPORTED_MODELS.map((m) => [m.id, m.workersId]));
 
 /**
  * Get AI Gateway options if configured.
@@ -145,6 +283,20 @@ export default {
 		const user = getUser(request, allowDevAuth);
 
 		// API Routes that don't require auth
+		if (url.pathname === "/api/models") {
+			if (request.method === "GET") {
+				// Return available models for the frontend
+				const models = SUPPORTED_MODELS.map(({ id, name, provider, description }) => ({
+					id,
+					name,
+					provider,
+					description,
+				}));
+				return Response.json({ models }, { headers: corsHeaders });
+			}
+			return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+		}
+
 		if (url.pathname === "/api/skills") {
 			if (request.method === "GET") {
 				// Load skills with their tools from markdown frontmatter
@@ -391,7 +543,7 @@ async function handleAgentRequest(
 		
 		// Map frontend model ID to Workers AI model ID
 		const requestedModel = typeof body.model === "string" ? body.model : "";
-		selectedModelId = SUPPORTED_MODELS[requestedModel] || DEFAULT_MODEL_ID;
+		selectedModelId = MODEL_LOOKUP.get(requestedModel) || DEFAULT_MODEL_ID;
 	} catch {
 		return new Response(JSON.stringify({ error: "Invalid JSON request body" }), {
 			status: 400,

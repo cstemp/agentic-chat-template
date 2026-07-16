@@ -163,6 +163,19 @@ export async function getSkills(): Promise<Skill[]> {
   return data.skills;
 }
 
+// Models API
+export interface Model {
+  id: string;
+  name: string;
+  provider: string;
+  description?: string;
+}
+
+export async function getModels(): Promise<Model[]> {
+  const data = await fetchApi<{ models: Model[] }>('/models');
+  return data.models;
+}
+
 // Agent API (streaming)
 export async function runAgent(
   messages: { role: string; content: string }[],

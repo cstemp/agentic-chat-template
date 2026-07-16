@@ -303,17 +303,20 @@
   bottom: 100%;
   left: 0;
   margin-bottom: 4px;
-  min-width: 160px;
+  min-width: 220px;
+  max-height: 400px;
+  overflow-y: auto;
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  overflow: hidden;
   z-index: 50;
 }
 
 .modelOption {
-  display: block;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   width: 100%;
   padding: 10px 12px;
   text-align: left;
@@ -328,7 +331,17 @@
 
 .modelOption.selected {
   background-color: var(--accent-muted);
-  color: var(--accent-primary);
+}
+
+.modelName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.modelProvider {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .sendButton {

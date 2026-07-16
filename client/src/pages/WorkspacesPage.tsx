@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Star, Clock, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useWorkspaces } from '../hooks/useWorkspaces';
@@ -7,10 +8,19 @@ export function WorkspacesPage() {
   const navigate = useNavigate();
   const { workspaces, favorites, recent, createWorkspace, deleteWorkspace, toggleFavorite } =
     useWorkspaces();
+  const [isCreating, setIsCreating] = useState(false);
 
-  const handleNewWorkspace = () => {
-    const workspace = createWorkspace();
-    navigate(`/workspace/${workspace.id}`);
+  const handleNewWorkspace = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      const workspace = await createWorkspace();
+      navigate(`/workspace/${workspace.id}`);
+    } catch (error) {
+      console.error('Failed to create workspace:', error);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
