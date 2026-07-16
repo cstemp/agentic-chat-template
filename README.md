@@ -146,7 +146,8 @@ After deploying, protect your Worker URL with Cloudflare Access to require authe
 │   │   ├── App.tsx            # Main app with routing
 │   │   ├── lib/api.ts         # API client
 │   │   ├── hooks/
-│   │   │   └── useWorkspaces.ts  # Workspace state management
+│   │   │   ├── useWorkspaces.ts  # Workspace state management
+│   │   │   └── useModels.ts      # Model fetching hook
 │   │   ├── components/        # Reusable UI components
 │   │   └── pages/             # Page components
 ├── src/
@@ -163,11 +164,12 @@ After deploying, protect your Worker URL with Cloudflare Access to require authe
 ## API Endpoints
 
 ### Authentication
-All API endpoints (except `/api/skills` and `/api/me`) require authentication via Cloudflare Access JWT.
+All API endpoints (except `/api/skills`, `/api/models`, and `/api/me`) require authentication via Cloudflare Access JWT.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/me` | GET | Get current user info |
+| `/api/models` | GET | List available AI models |
 | `/api/skills` | GET | List available skills |
 | `/api/workspaces` | GET | List user's workspaces |
 | `/api/workspaces` | POST | Create new workspace |
@@ -201,18 +203,22 @@ npx wrangler secret put MCP_AUTH_TOKEN
 
 ### Adding Models
 
-Update the `SUPPORTED_MODELS` map in `src/index.ts`:
+Add new models to the `SUPPORTED_MODELS` array in `src/index.ts`:
 
 ```typescript
-const SUPPORTED_MODELS: Record<string, string> = {
-  "llama-3.1-8b-instruct": "@cf/meta/llama-3.1-8b-instruct-fp8",
-  "llama-3.1-70b-instruct": "@cf/meta/llama-3.1-70b-instruct",
-  "mistral-7b-instruct": "@cf/mistral/mistral-7b-instruct-v0.1",
-  // Add more models here
-};
+const SUPPORTED_MODELS = [
+  {
+    id: "my-model",
+    workersId: "@cf/provider/model-name",
+    name: "Display Name",
+    provider: "Provider",
+    description: "Optional description",
+  },
+  // ... existing models
+];
 ```
 
-Also update the frontend model list in `client/src/pages/HomePage.tsx` and `WorkspacePage.tsx`.
+The frontend automatically fetches available models from the `/api/models` endpoint.
 
 ### Adding Skills
 
@@ -269,7 +275,7 @@ npx wrangler d1 execute agent-workspace-db --file=./schema.sql
 
 ## Security Considerations
 
-- All API routes require Cloudflare Access authentication (except `/api/skills`, `/api/me`)
+- All API routes require Cloudflare Access authentication (except `/api/skills`, `/api/models`, `/api/me`)
 - Tool execution is server-side and allowlisted
 - MCP tools are validated against `MCP_TOOL_ALLOWLIST`
 - User data is isolated by user ID from Access JWT
