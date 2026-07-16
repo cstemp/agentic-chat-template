@@ -192,33 +192,41 @@ const SKILLS = [
 	},
 ] as const;
 
-const SYSTEM_PROMPT = `You are a helpful AI assistant in an agentic workspace. You can help users with a wide range of tasks including answering questions, explaining concepts, writing content, analyzing information, and completing operational workflows.
+const SYSTEM_PROMPT = `You are a helpful AI assistant. Answer questions directly and helpfully using your knowledge. Be concise but thorough.`;
 
-You have access to some demo tools (runbook search, account lookup, task creation) that return sample data. These tools showcase how this template can be extended with real integrations.
+const BASE_PLANNER_PROMPT = `You are a planning module that decides whether to use tools or answer directly.
 
-Guidelines:
-- Answer questions directly using your knowledge when appropriate
-- Use tools only when they would genuinely help (e.g., looking up account info, searching operational procedures)
-- If a tool returns limited or irrelevant results, rely on your own knowledge to provide a helpful answer
-- Be concise but thorough - provide actionable, useful responses
-- For technical questions about Cloudflare, programming, or other topics, answer from your training knowledge`;
+Available tools (these are DEMO tools with LIMITED sample data - only use for specific operational tasks):
+- search_runbook: Search internal operational procedures (incidents, deployments, onboarding)
+- lookup_account: Look up customer account info by ID
+- create_follow_up_task: Create a follow-up task
 
-const BASE_PLANNER_PROMPT = `${SYSTEM_PROMPT}
+IMPORTANT: Most questions should be answered directly WITHOUT tools. Only use tools when the user specifically asks about:
+- Internal runbook/operational procedures
+- Customer account information
+- Creating tasks
 
-Available tools:
-- search_runbook: Search a small demo runbook with operational procedures. Arguments: { "query": string }
-- lookup_account: Look up demo customer/account context. Arguments: { "accountId": string }
-- create_follow_up_task: Create a demo follow-up task. Arguments: { "title": string, "priority": "low" | "medium" | "high" }
+For general knowledge questions, technical questions, explanations, writing, coding, advice, or anything not related to the specific tool purposes above - DO NOT use tools.
 
-Return only JSON with this shape:
+Return JSON only:
 {
-  "thought": "brief reason for the plan",
-  "tool_calls": [
-    { "name": "search_runbook", "arguments": { "query": "..." } }
-  ]
+  "thought": "reason",
+  "tool_calls": []
 }
 
-Use at most ${MAX_TOOL_CALLS} tool calls. Use NO tools and return an empty tool_calls array if the user's question can be answered directly from your knowledge (e.g., general questions, explanations, writing tasks).`;
+Examples of when to use EMPTY tool_calls array:
+- "What is Cloudflare Workers?" -> empty (general knowledge)
+- "When is the next iPhone?" -> empty (general knowledge)  
+- "Write me a poem" -> empty (creative task)
+- "Explain React hooks" -> empty (technical explanation)
+- "How do I deploy to AWS?" -> empty (general technical)
+
+Examples of when to use tools:
+- "Look up account ABC123" -> use lookup_account
+- "What's our incident triage process?" -> use search_runbook
+- "Create a task to follow up with the customer" -> use create_follow_up_task
+
+Use at most ${MAX_TOOL_CALLS} tool calls.`;
 
 type ToolName =
 	| "search_runbook"
@@ -695,8 +703,8 @@ async function streamFinalAnswer(
 		: "";
 
 	const answerInstruction = hasToolResults
-		? "Provide a helpful answer using the tool results and your knowledge. If the tool results aren't directly relevant, focus on answering the user's question using your own knowledge. Be concise and actionable."
-		: "Provide a helpful, direct answer to the user's question. Be concise and actionable.";
+		? "Answer the user's question. If the tool results are relevant, use them. If the tool results are NOT relevant to the question, IGNORE them completely and answer using your own knowledge. Do NOT mention that tools were unhelpful or that results weren't relevant - just answer the question directly."
+		: "Answer the user's question directly using your knowledge.";
 
 	const finalMessages: ChatMessage[] = [
 		{
