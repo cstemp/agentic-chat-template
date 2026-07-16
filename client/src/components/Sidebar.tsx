@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Home,
   LayoutGrid,
@@ -16,8 +16,9 @@ import {
   Moon,
   Grip,
   MoreHorizontal,
+  Trash2,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Theme } from '../App';
 import { useWorkspaces, Workspace } from '../hooks/useWorkspaces';
 import styles from './Sidebar.module.css';
@@ -29,9 +30,30 @@ interface SidebarProps {
 
 export function Sidebar({ theme, toggleTheme }: SidebarProps) {
   const navigate = useNavigate();
-  const { workspaces, favorites, recent, createWorkspace } = useWorkspaces();
+  const location = useLocation();
+  const { workspaces, favorites, recent, createWorkspace, deleteWorkspace, toggleFavorite } = useWorkspaces();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+
+  const handleDeleteWorkspace = async (id: string) => {
+    try {
+      await deleteWorkspace(id);
+      // If we're on the deleted workspace, navigate to home
+      if (location.pathname === `/workspace/${id}`) {
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Failed to delete workspace:', error);
+    }
+  };
+
+  const handleToggleFavorite = async (id: string) => {
+    try {
+      await toggleFavorite(id);
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+    }
+  };
 
   const handleNewWorkspace = async () => {
     if (isCreating) return;
@@ -163,7 +185,12 @@ export function Sidebar({ theme, toggleTheme }: SidebarProps) {
         ) : (
           <ul className={styles.workspaceList}>
             {favorites.map((ws) => (
-              <WorkspaceItem key={ws.id} workspace={ws} />
+              <WorkspaceItem
+                key={ws.id}
+                workspace={ws}
+                onDelete={() => handleDeleteWorkspace(ws.id)}
+                onToggleFavorite={() => handleToggleFavorite(ws.id)}
+              />
             ))}
           </ul>
         )}
@@ -178,7 +205,12 @@ export function Sidebar({ theme, toggleTheme }: SidebarProps) {
         </div>
         <ul className={styles.workspaceList}>
           {filteredRecent.slice(0, 10).map((ws) => (
-            <WorkspaceItem key={ws.id} workspace={ws} />
+            <WorkspaceItem
+              key={ws.id}
+              workspace={ws}
+              onDelete={() => handleDeleteWorkspace(ws.id)}
+              onToggleFavorite={() => handleToggleFavorite(ws.id)}
+            />
           ))}
         </ul>
       </div>
@@ -200,7 +232,30 @@ export function Sidebar({ theme, toggleTheme }: SidebarProps) {
   );
 }
 
-function WorkspaceItem({ workspace }: { workspace: Workspace }) {
+interface WorkspaceItemProps {
+  workspace: Workspace;
+  onDelete: () => void;
+  onToggleFavorite: () => void;
+}
+
+function WorkspaceItem({ workspace, onDelete, onToggleFavorite }: WorkspaceItemProps) {
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMenu]);
+
   return (
     <li className={styles.workspaceItem}>
       <NavLink
@@ -215,10 +270,49 @@ function WorkspaceItem({ workspace }: { workspace: Workspace }) {
           {workspace.title.charAt(0).toUpperCase()}
         </div>
         <span className={styles.workspaceTitle}>{workspace.title}</span>
-        <button className={styles.moreButton}>
+      </NavLink>
+      <div className={styles.menuContainer} ref={menuRef}>
+        <button
+          className={styles.moreButton}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowMenu(!showMenu);
+          }}
+        >
           <MoreHorizontal size={14} />
         </button>
-      </NavLink>
+        {showMenu && (
+          <div className={styles.dropdownMenu}>
+            <button
+              className={styles.menuItem}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleFavorite();
+                setShowMenu(false);
+              }}
+            >
+              <Star size={14} fill={workspace.isFavorite ? 'currentColor' : 'none'} />
+              <span>{workspace.isFavorite ? 'Remove from favorites' : 'Add to favorites'}</span>
+            </button>
+            <button
+              className={`${styles.menuItem} ${styles.danger}`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (confirm('Delete this workspace? This cannot be undone.')) {
+                  onDelete();
+                }
+                setShowMenu(false);
+              }}
+            >
+              <Trash2 size={14} />
+              <span>Delete</span>
+            </button>
+          </div>
+        )}
+      </div>
     </li>
   );
 }

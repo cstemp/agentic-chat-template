@@ -159,9 +159,13 @@
 
 .workspaceItem {
   border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  position: relative;
 }
 
 .workspaceLink {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -170,8 +174,12 @@
   transition: background-color var(--transition-fast);
 }
 
-.workspaceLink:hover {
+.workspaceItem:hover {
   background-color: var(--bg-hover);
+}
+
+.menuContainer {
+  position: relative;
 }
 
 .dragHandle {
@@ -209,18 +217,57 @@
 .moreButton {
   opacity: 0;
   padding: 4px;
+  margin-right: 4px;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   transition: all var(--transition-fast);
 }
 
-.workspaceLink:hover .moreButton {
+.workspaceItem:hover .moreButton {
   opacity: 1;
 }
 
 .moreButton:hover {
   background-color: var(--bg-active);
   color: var(--text-primary);
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.menuItem:hover {
+  background-color: var(--bg-hover);
+}
+
+.menuItem.danger {
+  color: var(--error);
+}
+
+.menuItem.danger:hover {
+  background-color: rgba(239, 68, 68, 0.1);
 }
 
 .footer {

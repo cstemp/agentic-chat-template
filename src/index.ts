@@ -192,16 +192,23 @@ const SKILLS = [
 	},
 ] as const;
 
-const SYSTEM_PROMPT = `You are a lightweight workflow agent. Your job is to help a user accomplish an operational task by deciding whether to call a small set of tools, reviewing the tool results, and producing a concise answer.
+const SYSTEM_PROMPT = `You are a helpful AI assistant in an agentic workspace. You can help users with a wide range of tasks including answering questions, explaining concepts, writing content, analyzing information, and completing operational workflows.
 
-This is a starter template. Tools return mock data so builders can replace them with their own APIs, databases, Queues, Workflows, Durable Objects, MCP servers, or third-party services.`;
+You have access to some demo tools (runbook search, account lookup, task creation) that return sample data. These tools showcase how this template can be extended with real integrations.
+
+Guidelines:
+- Answer questions directly using your knowledge when appropriate
+- Use tools only when they would genuinely help (e.g., looking up account info, searching operational procedures)
+- If a tool returns limited or irrelevant results, rely on your own knowledge to provide a helpful answer
+- Be concise but thorough - provide actionable, useful responses
+- For technical questions about Cloudflare, programming, or other topics, answer from your training knowledge`;
 
 const BASE_PLANNER_PROMPT = `${SYSTEM_PROMPT}
 
 Available tools:
-- search_runbook: Find guidance in a small internal runbook. Arguments: { "query": string }
-- lookup_account: Look up mock customer/account context. Arguments: { "accountId": string }
-- create_follow_up_task: Create a mock follow-up task. Arguments: { "title": string, "priority": "low" | "medium" | "high" }
+- search_runbook: Search a small demo runbook with operational procedures. Arguments: { "query": string }
+- lookup_account: Look up demo customer/account context. Arguments: { "accountId": string }
+- create_follow_up_task: Create a demo follow-up task. Arguments: { "title": string, "priority": "low" | "medium" | "high" }
 
 Return only JSON with this shape:
 {
@@ -211,7 +218,7 @@ Return only JSON with this shape:
   ]
 }
 
-Use at most ${MAX_TOOL_CALLS} tool calls. Use no tools if the user only needs a direct answer.`;
+Use at most ${MAX_TOOL_CALLS} tool calls. Use NO tools and return an empty tool_calls array if the user's question can be answered directly from your knowledge (e.g., general questions, explanations, writing tasks).`;
 
 type ToolName =
 	| "search_runbook"
@@ -678,6 +685,15 @@ async function streamFinalAnswer(
 	skill?: Skill,
 	modelId: string = DEFAULT_MODEL_ID,
 ): Promise<void> {
+	const hasToolResults = toolResults.length > 0;
+	const toolContext = hasToolResults
+		? `\n\nContext from tools:\n${JSON.stringify(toolResults, null, 2)}`
+		: "";
+
+	const answerInstruction = hasToolResults
+		? "Provide a helpful answer using the tool results and your knowledge. If the tool results aren't directly relevant, focus on answering the user's question using your own knowledge. Be concise and actionable."
+		: "Provide a helpful, direct answer to the user's question. Be concise and actionable.";
+
 	const finalMessages: ChatMessage[] = [
 		{
 			role: "system",
@@ -688,7 +704,7 @@ async function streamFinalAnswer(
 		...messages.filter((message) => message.role !== "system"),
 		{
 			role: "user",
-			content: `Agent plan:\n${JSON.stringify(plan, null, 2)}\n\nTool results:\n${JSON.stringify(toolResults, null, 2)}\n\nWrite the final answer. Keep it brief, explain which tools were used, and include clear next steps if useful.`,
+			content: `${toolContext}\n\n${answerInstruction}`,
 		},
 	];
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   Send,
   ChevronDown,
@@ -8,6 +8,8 @@ import {
   Loader2,
   FileText,
   File as FileIcon,
+  Trash2,
+  Edit3,
 } from 'lucide-react';
 import { useWorkspace, Message, AgentStep, MessageAttachment } from '../hooks/useWorkspaces';
 import { useModels, Model } from '../hooks/useModels';
@@ -24,6 +26,7 @@ interface LocationState {
 export function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const state = location.state as LocationState | null;
 
   const {
@@ -33,6 +36,8 @@ export function WorkspacePage() {
     addMessage,
     updateMessage,
     toggleFavorite,
+    deleteWorkspace,
+    updateWorkspace,
   } = useWorkspace(id);
 
   const { models, defaultModel } = useModels();
@@ -42,6 +47,10 @@ export function WorkspacePage() {
   const [selectedModel, setSelectedModel] = useState<Model>(defaultModel);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const headerMenuRef = useRef<HTMLDivElement>(null);
 
   // Update selected model when models load, respecting state if provided
   useEffect(() => {
@@ -81,6 +90,46 @@ export function WorkspacePage() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Close header menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target as Node)) {
+        setShowHeaderMenu(false);
+      }
+    }
+
+    if (showHeaderMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showHeaderMenu]);
+
+  const handleDeleteWorkspace = async () => {
+    if (!confirm('Delete this workspace? This cannot be undone.')) return;
+    try {
+      await deleteWorkspace();
+      navigate('/');
+    } catch (error) {
+      console.error('Failed to delete workspace:', error);
+    }
+  };
+
+  const handleRenameWorkspace = () => {
+    setEditTitle(workspace?.title || '');
+    setIsEditingTitle(true);
+    setShowHeaderMenu(false);
+  };
+
+  const handleSaveTitle = async () => {
+    if (!editTitle.trim() || !workspace) return;
+    try {
+      await updateWorkspace({ title: editTitle.trim() });
+      setIsEditingTitle(false);
+    } catch (error) {
+      console.error('Failed to rename workspace:', error);
+    }
+  };
 
   const handleAttach = (files: AttachedFile[]) => {
     setAttachments((prev) => [...prev, ...files]);
@@ -247,7 +296,22 @@ export function WorkspacePage() {
       {/* Header */}
       <header className={styles.header}>
         <div className={styles.headerLeft}>
-          <h1 className={styles.title}>{workspace.title}</h1>
+          {isEditingTitle ? (
+            <input
+              type="text"
+              className={styles.titleInput}
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={handleSaveTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveTitle();
+                if (e.key === 'Escape') setIsEditingTitle(false);
+              }}
+              autoFocus
+            />
+          ) : (
+            <h1 className={styles.title}>{workspace.title}</h1>
+          )}
         </div>
         <div className={styles.headerRight}>
           <button
@@ -259,9 +323,43 @@ export function WorkspacePage() {
           >
             <Star size={18} fill={workspace.isFavorite ? 'currentColor' : 'none'} />
           </button>
-          <button className={styles.iconButton} title="More options">
-            <MoreHorizontal size={18} />
-          </button>
+          <div className={styles.headerMenuContainer} ref={headerMenuRef}>
+            <button
+              className={styles.iconButton}
+              onClick={() => setShowHeaderMenu(!showHeaderMenu)}
+              title="More options"
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {showHeaderMenu && (
+              <div className={styles.headerDropdown}>
+                <button
+                  className={styles.headerMenuItem}
+                  onClick={handleRenameWorkspace}
+                >
+                  <Edit3 size={16} />
+                  <span>Rename</span>
+                </button>
+                <button
+                  className={styles.headerMenuItem}
+                  onClick={() => {
+                    toggleFavorite();
+                    setShowHeaderMenu(false);
+                  }}
+                >
+                  <Star size={16} fill={workspace.isFavorite ? 'currentColor' : 'none'} />
+                  <span>{workspace.isFavorite ? 'Remove from favorites' : 'Add to favorites'}</span>
+                </button>
+                <button
+                  className={`${styles.headerMenuItem} ${styles.danger}`}
+                  onClick={handleDeleteWorkspace}
+                >
+                  <Trash2 size={16} />
+                  <span>Delete</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

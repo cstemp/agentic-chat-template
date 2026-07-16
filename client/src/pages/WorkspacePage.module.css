@@ -39,10 +39,68 @@
   text-overflow: ellipsis;
 }
 
+.titleInput {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  max-width: 400px;
+}
+
+.titleInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
 .headerRight {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.headerMenuContainer {
+  position: relative;
+}
+
+.headerDropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 200px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.headerMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.headerMenuItem:hover {
+  background-color: var(--bg-hover);
+}
+
+.headerMenuItem.danger {
+  color: var(--error);
+}
+
+.headerMenuItem.danger:hover {
+  background-color: rgba(239, 68, 68, 0.1);
 }
 
 .iconButton {

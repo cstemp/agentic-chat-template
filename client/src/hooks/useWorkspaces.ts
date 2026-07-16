@@ -252,6 +252,18 @@ export function useWorkspace(workspaceId: string | undefined) {
     }
   }, [workspace]);
 
+  const deleteWorkspace = useCallback(async () => {
+    if (!workspaceId) return;
+
+    try {
+      await api.deleteWorkspace(workspaceId);
+      setWorkspace(null);
+    } catch (err) {
+      console.error('Failed to delete workspace:', err);
+      throw err;
+    }
+  }, [workspaceId]);
+
   return {
     workspace,
     loading,
@@ -261,5 +273,6 @@ export function useWorkspace(workspaceId: string | undefined) {
     updateMessage,
     updateWorkspace,
     toggleFavorite,
+    deleteWorkspace,
   };
 }
