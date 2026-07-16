@@ -219,4 +219,77 @@ export async function runAgent(
   });
 }
 
+// MCP Server API
+export interface McpServer {
+  id: string;
+  name: string;
+  url: string;
+  toolAllowlist: string[];
+  isEnabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface McpServerTool {
+  name: string;
+  description?: string;
+}
+
+export interface McpTestResult {
+  success: boolean;
+  error?: string;
+  tools?: McpServerTool[];
+}
+
+export async function getMcpServers(): Promise<McpServer[]> {
+  const data = await fetchApi<{ servers: McpServer[] }>('/mcp-servers');
+  return data.servers;
+}
+
+export async function getMcpServer(id: string): Promise<McpServer> {
+  const data = await fetchApi<{ server: McpServer }>(`/mcp-servers/${id}`);
+  return data.server;
+}
+
+export async function createMcpServer(data: {
+  name: string;
+  url: string;
+  authToken?: string;
+  toolAllowlist?: string[];
+}): Promise<McpServer> {
+  const result = await fetchApi<{ server: McpServer }>('/mcp-servers', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return result.server;
+}
+
+export async function updateMcpServer(
+  id: string,
+  data: Partial<{
+    name: string;
+    url: string;
+    authToken: string;
+    toolAllowlist: string[];
+    isEnabled: boolean;
+  }>
+): Promise<void> {
+  await fetchApi(`/mcp-servers/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteMcpServer(id: string): Promise<void> {
+  await fetchApi(`/mcp-servers/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function testMcpServer(id: string): Promise<McpTestResult> {
+  return fetchApi<McpTestResult>(`/mcp-servers/${id}/test`, {
+    method: 'POST',
+  });
+}
+
 export { ApiError };

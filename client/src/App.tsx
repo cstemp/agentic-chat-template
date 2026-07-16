@@ -8,6 +8,7 @@ import { WorkspacesPage } from './pages/WorkspacesPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { SkillsPage } from './pages/SkillsPage';
 import { ContextPage } from './pages/ContextPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 export type Theme = 'dark' | 'light';
 
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/workspace/:id" element={<WorkspacePage />} />
             <Route path="/skills" element={<SkillsPage />} />
             <Route path="/context" element={<ContextPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

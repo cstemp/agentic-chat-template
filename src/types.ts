@@ -2,6 +2,25 @@
  * Type definitions for the agent workflow application.
  */
 
+/**
+ * Browser Run binding type.
+ * @see https://developers.cloudflare.com/browser-run/
+ */
+export interface BrowserRun {
+	/**
+	 * Execute a quick action without managing browser lifecycle.
+	 */
+	quickAction(
+		action: 'markdown' | 'screenshot' | 'pdf' | 'scrape',
+		options: {
+			url: string;
+			gotoOptions?: {
+				waitUntil?: 'load' | 'domcontentloaded' | 'networkidle0' | 'networkidle2';
+			};
+		}
+	): Promise<Response>;
+}
+
 export interface Env {
 	/**
 	 * Binding for the Workers AI API.
@@ -17,6 +36,12 @@ export interface Env {
 	 * D1 database for workspace persistence.
 	 */
 	DB: D1Database;
+
+	/**
+	 * Browser Run binding for web scraping and content extraction.
+	 * https://developers.cloudflare.com/browser-run/
+	 */
+	BROWSER?: BrowserRun;
 
 	/**
 	 * Optional AI Gateway ID. When set, all AI requests route through the gateway

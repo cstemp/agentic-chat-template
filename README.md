@@ -16,6 +16,7 @@ This template provides a complete workspace-based agent interface that runs 100%
 - **D1** - SQLite database for workspace and message persistence
 - **Cloudflare Access** - User authentication via JWT tokens
 - **Workers Assets** - Static file serving for the React frontend
+- **Browser Run** - Web content extraction and rendering
 
 ## Features
 
@@ -27,7 +28,8 @@ This template provides a complete workspace-based agent interface that runs 100%
 - **Model Selection**: Choose between available Workers AI models
 - **File Attachments**: Attach images and documents to messages
 - **Skills System**: Reusable markdown workflow recipes
-- **MCP Integration**: Optional remote Model Context Protocol tool bridge
+- **MCP Integration**: User-configurable MCP servers for external tools
+- **Web Fetching**: Browser Run integration for extracting web content
 
 <!-- dash-content-end -->
 
@@ -40,6 +42,7 @@ This template provides a complete workspace-based agent interface that runs 100%
 | **AI Gateway** | Request logging, caching, rate limiting |
 | **D1** | User data, workspaces, messages persistence |
 | **Access** | Authentication, user identity via JWT |
+| **Browser Run** | Web page fetching and markdown extraction |
 
 ## Getting Started
 
@@ -177,6 +180,12 @@ All API endpoints (except `/api/skills`, `/api/models`, and `/api/me`) require a
 | `/api/workspaces/:id` | PUT | Update workspace |
 | `/api/workspaces/:id` | DELETE | Delete workspace |
 | `/api/workspaces/:id/messages` | POST | Add message to workspace |
+| `/api/mcp-servers` | GET | List user's MCP servers |
+| `/api/mcp-servers` | POST | Add MCP server |
+| `/api/mcp-servers/:id` | GET | Get MCP server |
+| `/api/mcp-servers/:id` | PUT | Update MCP server |
+| `/api/mcp-servers/:id` | DELETE | Delete MCP server |
+| `/api/mcp-servers/:id/test` | POST | Test MCP server connection |
 | `/api/agent` | POST | Run agent (streaming SSE) |
 
 ## Configuration
@@ -198,6 +207,49 @@ All API endpoints (except `/api/skills`, `/api/models`, and `/api/me`) require a
 # MCP server authentication (if needed)
 npx wrangler secret put MCP_AUTH_TOKEN
 ```
+
+## MCP Server Configuration
+
+Users can configure their own MCP (Model Context Protocol) servers through the Settings page (`/settings`). Each user's servers are private and not shared with other users.
+
+### User-Configured Servers
+
+- Navigate to Settings > MCP Servers
+- Add servers with URL, optional auth token, and tool allowlist
+- Test connections to verify server availability
+- Enable/disable servers without deleting them
+
+The agent automatically includes enabled MCP servers in its planning phase and can call tools from any configured server using the `call_user_mcp_tool` function.
+
+### Database Schema
+
+User MCP servers are stored in the `mcp_servers` table:
+
+```sql
+CREATE TABLE mcp_servers (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    auth_token TEXT,
+    tool_allowlist TEXT,
+    is_enabled INTEGER DEFAULT 1,
+    created_at INTEGER,
+    updated_at INTEGER,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+```
+
+### Converting to Admin-Configured Servers
+
+To make MCP servers admin-configured (shared across all users) instead of user-specific:
+
+1. **Remove user_id filtering**: Update `getEnabledMcpServers()` in `src/db.ts` to not filter by user ID
+2. **Move to environment config**: Store server configurations in `wrangler.jsonc` vars or use the existing `MCP_SERVER_URL` pattern
+3. **Remove Settings UI**: Or convert it to admin-only access
+4. **Add Access policies**: Use Cloudflare Access to restrict who can configure servers
+
+For enterprise deployments, consider using [MCP Server Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/) for centralized tool governance with access policies and audit logging.
 
 ## Customization
 
@@ -256,6 +308,7 @@ The D1 schema includes:
 - `messages` - Chat messages
 - `message_attachments` - File attachments
 - `message_steps` - Agent steps (plans, tool results, etc.)
+- `mcp_servers` - User-configured MCP servers
 
 To modify, edit `schema.sql` and re-run:
 ```bash

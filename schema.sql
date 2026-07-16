@@ -56,6 +56,20 @@ CREATE TABLE IF NOT EXISTS message_steps (
     FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 
+-- MCP servers configured by users
+CREATE TABLE IF NOT EXISTS mcp_servers (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    auth_token TEXT,
+    tool_allowlist TEXT,
+    is_enabled INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_workspaces_user_id ON workspaces(user_id);
 CREATE INDEX IF NOT EXISTS idx_workspaces_updated_at ON workspaces(updated_at DESC);
@@ -64,3 +78,4 @@ CREATE INDEX IF NOT EXISTS idx_messages_workspace_id ON messages(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(workspace_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
 CREATE INDEX IF NOT EXISTS idx_message_steps_message_id ON message_steps(message_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_servers_user_id ON mcp_servers(user_id);

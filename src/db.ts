@@ -478,6 +478,206 @@ export async function updateMessage(
 	return true;
 }
 
+// MCP Server types and functions
+
+export interface DbMcpServer {
+	id: string;
+	user_id: string;
+	name: string;
+	url: string;
+	auth_token: string | null;
+	tool_allowlist: string | null;
+	is_enabled: number;
+	created_at: number;
+	updated_at: number;
+}
+
+export interface McpServerResponse {
+	id: string;
+	name: string;
+	url: string;
+	toolAllowlist: string[];
+	isEnabled: boolean;
+	createdAt: number;
+	updatedAt: number;
+}
+
+export async function getMcpServers(
+	db: D1Database,
+	userId: string
+): Promise<McpServerResponse[]> {
+	const result = await db
+		.prepare(`SELECT * FROM mcp_servers WHERE user_id = ? ORDER BY name ASC`)
+		.bind(userId)
+		.all<DbMcpServer>();
+
+	return (result.results || []).map(mapMcpServer);
+}
+
+export async function getMcpServer(
+	db: D1Database,
+	userId: string,
+	serverId: string
+): Promise<McpServerResponse | null> {
+	const server = await db
+		.prepare(`SELECT * FROM mcp_servers WHERE id = ? AND user_id = ?`)
+		.bind(serverId, userId)
+		.first<DbMcpServer>();
+
+	return server ? mapMcpServer(server) : null;
+}
+
+export async function getMcpServerWithToken(
+	db: D1Database,
+	userId: string,
+	serverId: string
+): Promise<(McpServerResponse & { authToken?: string }) | null> {
+	const server = await db
+		.prepare(`SELECT * FROM mcp_servers WHERE id = ? AND user_id = ?`)
+		.bind(serverId, userId)
+		.first<DbMcpServer>();
+
+	if (!server) return null;
+
+	return {
+		...mapMcpServer(server),
+		authToken: server.auth_token || undefined,
+	};
+}
+
+export async function getEnabledMcpServers(
+	db: D1Database,
+	userId: string
+): Promise<(McpServerResponse & { authToken?: string })[]> {
+	const result = await db
+		.prepare(`SELECT * FROM mcp_servers WHERE user_id = ? AND is_enabled = 1 ORDER BY name ASC`)
+		.bind(userId)
+		.all<DbMcpServer>();
+
+	return (result.results || []).map((server) => ({
+		...mapMcpServer(server),
+		authToken: server.auth_token || undefined,
+	}));
+}
+
+export async function createMcpServer(
+	db: D1Database,
+	userId: string,
+	data: {
+		name: string;
+		url: string;
+		authToken?: string;
+		toolAllowlist?: string[];
+	}
+): Promise<McpServerResponse> {
+	const id = generateId("mcp");
+	const now = Math.floor(Date.now() / 1000);
+
+	await db
+		.prepare(
+			`INSERT INTO mcp_servers (id, user_id, name, url, auth_token, tool_allowlist, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		)
+		.bind(
+			id,
+			userId,
+			data.name,
+			data.url,
+			data.authToken || null,
+			data.toolAllowlist ? data.toolAllowlist.join(",") : null,
+			now,
+			now
+		)
+		.run();
+
+	return {
+		id,
+		name: data.name,
+		url: data.url,
+		toolAllowlist: data.toolAllowlist || [],
+		isEnabled: true,
+		createdAt: now * 1000,
+		updatedAt: now * 1000,
+	};
+}
+
+export async function updateMcpServer(
+	db: D1Database,
+	userId: string,
+	serverId: string,
+	data: Partial<{
+		name: string;
+		url: string;
+		authToken: string;
+		toolAllowlist: string[];
+		isEnabled: boolean;
+	}>
+): Promise<boolean> {
+	const updates: string[] = [];
+	const values: (string | number | null)[] = [];
+
+	if (data.name !== undefined) {
+		updates.push("name = ?");
+		values.push(data.name);
+	}
+	if (data.url !== undefined) {
+		updates.push("url = ?");
+		values.push(data.url);
+	}
+	if (data.authToken !== undefined) {
+		updates.push("auth_token = ?");
+		values.push(data.authToken || null);
+	}
+	if (data.toolAllowlist !== undefined) {
+		updates.push("tool_allowlist = ?");
+		values.push(data.toolAllowlist.length > 0 ? data.toolAllowlist.join(",") : null);
+	}
+	if (data.isEnabled !== undefined) {
+		updates.push("is_enabled = ?");
+		values.push(data.isEnabled ? 1 : 0);
+	}
+
+	if (updates.length === 0) {
+		return true;
+	}
+
+	updates.push("updated_at = unixepoch()");
+
+	const result = await db
+		.prepare(
+			`UPDATE mcp_servers SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`
+		)
+		.bind(...values, serverId, userId)
+		.run();
+
+	return result.meta.changes > 0;
+}
+
+export async function deleteMcpServer(
+	db: D1Database,
+	userId: string,
+	serverId: string
+): Promise<boolean> {
+	const result = await db
+		.prepare(`DELETE FROM mcp_servers WHERE id = ? AND user_id = ?`)
+		.bind(serverId, userId)
+		.run();
+
+	return result.meta.changes > 0;
+}
+
+function mapMcpServer(row: DbMcpServer): McpServerResponse {
+	return {
+		id: row.id,
+		name: row.name,
+		url: row.url,
+		toolAllowlist: row.tool_allowlist ? row.tool_allowlist.split(",").filter(Boolean) : [],
+		isEnabled: row.is_enabled === 1,
+		createdAt: row.created_at * 1000,
+		updatedAt: row.updated_at * 1000,
+	};
+}
+
 // Helper functions
 
 function mapWorkspace(row: DbWorkspace): WorkspaceResponse {

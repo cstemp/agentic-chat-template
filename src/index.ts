@@ -9,6 +9,12 @@
 import { ChatMessage, Env } from "./types";
 import { getUser, AccessUser } from "./auth";
 import * as db from "./db";
+import type { McpServerResponse } from "./db";
+
+// User MCP server with auth token for runtime use
+interface UserMcpServer extends McpServerResponse {
+	authToken?: string;
+}
 
 // Default model ID for Workers AI.
 // https://developers.cloudflare.com/workers-ai/models/
@@ -196,17 +202,16 @@ const SYSTEM_PROMPT = `You are a helpful AI assistant. Answer questions directly
 
 const BASE_PLANNER_PROMPT = `You are a planning module that decides whether to use tools or answer directly.
 
-Available tools (these are DEMO tools with LIMITED sample data - only use for specific operational tasks):
-- search_runbook: Search internal operational procedures (incidents, deployments, onboarding)
-- lookup_account: Look up customer account info by ID
-- create_follow_up_task: Create a follow-up task
+Available tools:
+- fetch_webpage: Fetch and extract content from a URL as markdown. Use for reading web pages, articles, documentation. Arguments: { "url": string }
+- search_runbook: Search internal operational procedures (demo data). Arguments: { "query": string }
+- lookup_account: Look up customer account info by ID (demo data). Arguments: { "accountId": string }
+- create_follow_up_task: Create a follow-up task (demo). Arguments: { "title": string, "priority": "low" | "medium" | "high" }
 
-IMPORTANT: Most questions should be answered directly WITHOUT tools. Only use tools when the user specifically asks about:
-- Internal runbook/operational procedures
-- Customer account information
-- Creating tasks
-
-For general knowledge questions, technical questions, explanations, writing, coding, advice, or anything not related to the specific tool purposes above - DO NOT use tools.
+Guidelines:
+- Use fetch_webpage when the user asks about content from a specific URL or website
+- Use demo tools (search_runbook, lookup_account, create_follow_up_task) only for their specific purposes
+- Answer general knowledge questions directly WITHOUT tools
 
 Return JSON only:
 {
@@ -214,25 +219,22 @@ Return JSON only:
   "tool_calls": []
 }
 
-Examples of when to use EMPTY tool_calls array:
-- "What is Cloudflare Workers?" -> empty (general knowledge)
-- "When is the next iPhone?" -> empty (general knowledge)  
-- "Write me a poem" -> empty (creative task)
-- "Explain React hooks" -> empty (technical explanation)
-- "How do I deploy to AWS?" -> empty (general technical)
-
-Examples of when to use tools:
+Examples:
+- "What does example.com say?" -> use fetch_webpage with url "https://example.com"
+- "Summarize this article: https://..." -> use fetch_webpage
+- "What is Cloudflare Workers?" -> empty (general knowledge, no URL given)
 - "Look up account ABC123" -> use lookup_account
 - "What's our incident triage process?" -> use search_runbook
-- "Create a task to follow up with the customer" -> use create_follow_up_task
 
 Use at most ${MAX_TOOL_CALLS} tool calls.`;
 
 type ToolName =
+	| "fetch_webpage"
 	| "search_runbook"
 	| "lookup_account"
 	| "create_follow_up_task"
-	| "call_mcp_tool";
+	| "call_mcp_tool"
+	| "call_user_mcp_tool";
 
 interface ToolCall {
 	name: ToolName;
@@ -400,6 +402,23 @@ export default {
 		const messageMatch = url.pathname.match(/^\/api\/workspaces\/([^\/]+)\/messages\/([^\/]+)$/);
 		if (messageMatch) {
 			return handleMessageRoute(request, env, user, messageMatch[1], messageMatch[2], corsHeaders);
+		}
+
+		// MCP servers routes: /api/mcp-servers
+		if (url.pathname === "/api/mcp-servers") {
+			return handleMcpServersRoute(request, env, user, corsHeaders);
+		}
+
+		// Single MCP server: /api/mcp-servers/:id
+		const mcpServerMatch = url.pathname.match(/^\/api\/mcp-servers\/([^\/]+)$/);
+		if (mcpServerMatch) {
+			return handleMcpServerRoute(request, env, user, mcpServerMatch[1], corsHeaders);
+		}
+
+		// Test MCP server connection: /api/mcp-servers/:id/test
+		const mcpTestMatch = url.pathname.match(/^\/api\/mcp-servers\/([^\/]+)\/test$/);
+		if (mcpTestMatch) {
+			return handleMcpServerTestRoute(request, env, user, mcpTestMatch[1], corsHeaders);
 		}
 
 		if (url.pathname === "/api/agent") {
@@ -590,6 +609,214 @@ async function handleMessageRoute(
 }
 
 /**
+ * Handle /api/mcp-servers routes
+ */
+async function handleMcpServersRoute(
+	request: Request,
+	env: Env,
+	user: AccessUser,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	if (request.method === "GET") {
+		const servers = await db.getMcpServers(env.DB, user.id);
+		return Response.json({ servers }, { headers: corsHeaders });
+	}
+
+	if (request.method === "POST") {
+		try {
+			const body = await request.json() as {
+				name: string;
+				url: string;
+				authToken?: string;
+				toolAllowlist?: string[];
+			};
+
+			if (!body.name || !body.url) {
+				return Response.json(
+					{ error: "Name and URL are required" },
+					{ status: 400, headers: corsHeaders }
+				);
+			}
+
+			// Validate URL
+			try {
+				new URL(body.url);
+			} catch {
+				return Response.json(
+					{ error: "Invalid URL format" },
+					{ status: 400, headers: corsHeaders }
+				);
+			}
+
+			const server = await db.createMcpServer(env.DB, user.id, body);
+			return Response.json({ server }, { status: 201, headers: corsHeaders });
+		} catch (error) {
+			return Response.json(
+				{ error: "Failed to create MCP server" },
+				{ status: 400, headers: corsHeaders }
+			);
+		}
+	}
+
+	return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+}
+
+/**
+ * Handle /api/mcp-servers/:id routes
+ */
+async function handleMcpServerRoute(
+	request: Request,
+	env: Env,
+	user: AccessUser,
+	serverId: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	if (request.method === "GET") {
+		const server = await db.getMcpServer(env.DB, user.id, serverId);
+		if (!server) {
+			return Response.json(
+				{ error: "MCP server not found" },
+				{ status: 404, headers: corsHeaders }
+			);
+		}
+		return Response.json({ server }, { headers: corsHeaders });
+	}
+
+	if (request.method === "PUT" || request.method === "PATCH") {
+		try {
+			const body = await request.json() as Partial<{
+				name: string;
+				url: string;
+				authToken: string;
+				toolAllowlist: string[];
+				isEnabled: boolean;
+			}>;
+
+			// Validate URL if provided
+			if (body.url) {
+				try {
+					new URL(body.url);
+				} catch {
+					return Response.json(
+						{ error: "Invalid URL format" },
+						{ status: 400, headers: corsHeaders }
+					);
+				}
+			}
+
+			const success = await db.updateMcpServer(env.DB, user.id, serverId, body);
+			if (!success) {
+				return Response.json(
+					{ error: "MCP server not found" },
+					{ status: 404, headers: corsHeaders }
+				);
+			}
+			return Response.json({ success: true }, { headers: corsHeaders });
+		} catch (error) {
+			return Response.json(
+				{ error: "Failed to update MCP server" },
+				{ status: 400, headers: corsHeaders }
+			);
+		}
+	}
+
+	if (request.method === "DELETE") {
+		const success = await db.deleteMcpServer(env.DB, user.id, serverId);
+		if (!success) {
+			return Response.json(
+				{ error: "MCP server not found" },
+				{ status: 404, headers: corsHeaders }
+			);
+		}
+		return Response.json({ success: true }, { headers: corsHeaders });
+	}
+
+	return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+}
+
+/**
+ * Handle /api/mcp-servers/:id/test routes
+ */
+async function handleMcpServerTestRoute(
+	request: Request,
+	env: Env,
+	user: AccessUser,
+	serverId: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	if (request.method !== "POST") {
+		return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+	}
+
+	const server = await db.getMcpServerWithToken(env.DB, user.id, serverId);
+	if (!server) {
+		return Response.json(
+			{ error: "MCP server not found" },
+			{ status: 404, headers: corsHeaders }
+		);
+	}
+
+	try {
+		// Try to list tools from the MCP server
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+		};
+		if (server.authToken) {
+			headers["Authorization"] = `Bearer ${server.authToken}`;
+		}
+
+		const response = await fetch(server.url, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({
+				jsonrpc: "2.0",
+				id: 1,
+				method: "tools/list",
+			}),
+		});
+
+		if (!response.ok) {
+			return Response.json(
+				{
+					success: false,
+					error: `Server returned ${response.status}: ${response.statusText}`,
+				},
+				{ headers: corsHeaders }
+			);
+		}
+
+		const result = await response.json() as {
+			result?: { tools?: { name: string; description?: string }[] };
+			error?: { message: string };
+		};
+
+		if (result.error) {
+			return Response.json(
+				{ success: false, error: result.error.message },
+				{ headers: corsHeaders }
+			);
+		}
+
+		const tools = result.result?.tools || [];
+		return Response.json(
+			{
+				success: true,
+				tools: tools.map((t) => ({ name: t.name, description: t.description })),
+			},
+			{ headers: corsHeaders }
+		);
+	} catch (error) {
+		return Response.json(
+			{
+				success: false,
+				error: error instanceof Error ? error.message : "Failed to connect to MCP server",
+			},
+			{ headers: corsHeaders }
+		);
+	}
+}
+
+/**
  * Handles agent workflow requests.
  */
 async function handleAgentRequest(
@@ -621,12 +848,16 @@ async function handleAgentRequest(
 		});
 	}
 
-	// Capture modelId for use in the stream closure
+	// Capture modelId and userId for use in the stream closure
 	const modelId = selectedModelId;
+	const userId = user.id;
 
 	const stream = new ReadableStream({
 		async start(controller) {
 			try {
+				// Load user's enabled MCP servers
+				const userMcpServers = await db.getEnabledMcpServers(env.DB, userId);
+				
 				const skill = await loadSkill(selectedSkillName, env);
 				if (skill) {
 					sendAgentEvent(controller, {
@@ -635,7 +866,7 @@ async function handleAgentRequest(
 					});
 				}
 
-				const plan = await createPlan(messages, env, skill, modelId);
+				const plan = await createPlan(messages, env, skill, modelId, userMcpServers);
 				const hasToolCalls = plan.tool_calls.length > 0;
 
 				// Only show planning UI if we're actually using tools
@@ -654,7 +885,7 @@ async function handleAgentRequest(
 						message: `Running ${toolCall.name}`,
 					});
 
-					const result = await runTool(toolCall, env);
+					const result = await runTool(toolCall, env, userMcpServers);
 					toolResults.push({
 						name: toolCall.name,
 						arguments: toolCall.arguments,
@@ -706,9 +937,10 @@ async function createPlan(
 	env: Env,
 	skill?: Skill,
 	modelId: string = DEFAULT_MODEL_ID,
+	userMcpServers: UserMcpServer[] = [],
 ): Promise<AgentPlan> {
 	const plannerMessages: ChatMessage[] = [
-		{ role: "system", content: buildPlannerPrompt(env, skill) },
+		{ role: "system", content: buildPlannerPrompt(env, skill, userMcpServers) },
 		...messages.filter((message) => message.role !== "system"),
 	];
 
@@ -831,8 +1063,10 @@ async function forwardWorkersAiStream(
 	}
 }
 
-async function runTool(toolCall: ToolCall, env: Env): Promise<string> {
+async function runTool(toolCall: ToolCall, env: Env, userMcpServers: UserMcpServer[] = []): Promise<string> {
 	switch (toolCall.name) {
+		case "fetch_webpage":
+			return fetchWebpage(env, String(toolCall.arguments.url ?? ""));
 		case "search_runbook":
 			return searchRunbook(String(toolCall.arguments.query ?? ""));
 		case "lookup_account":
@@ -850,27 +1084,58 @@ async function runTool(toolCall: ToolCall, env: Env): Promise<string> {
 					? toolCall.arguments.arguments
 					: {},
 			);
+		case "call_user_mcp_tool":
+			return callUserMcpTool(
+				userMcpServers,
+				String(toolCall.arguments.serverId ?? ""),
+				String(toolCall.arguments.toolName ?? ""),
+				isRecord(toolCall.arguments.arguments)
+					? toolCall.arguments.arguments
+					: {},
+			);
 	}
 }
 
-function buildPlannerPrompt(env: Env, skill?: Skill): string {
-	const mcpTools = getAllowedMcpTools(env);
+function buildPlannerPrompt(env: Env, skill?: Skill, userMcpServers: UserMcpServer[] = []): string {
+	const envMcpTools = getAllowedMcpTools(env);
 	const skillPrompt = skill
 		? `\n\nSelected skill:\n${formatSkillForPrompt(skill)}\n\nPrefer the selected skill's workflow and output style when planning.`
 		: "";
 
-	if (mcpTools.length === 0 || !env.MCP_SERVER_URL) {
-		return `${BASE_PLANNER_PROMPT}${skillPrompt}`;
+	// Build user MCP servers prompt
+	let userMcpPrompt = "";
+	if (userMcpServers.length > 0) {
+		const serverDescriptions = userMcpServers.map((server) => {
+			const tools = server.toolAllowlist.length > 0
+				? `Allowed tools: ${server.toolAllowlist.join(", ")}`
+				: "All tools allowed";
+			return `- ${server.name} (ID: ${server.id}): ${tools}`;
+		}).join("\n");
+		
+		userMcpPrompt = `
+
+User-configured MCP servers:
+${serverDescriptions}
+
+- call_user_mcp_tool: Call a tool from a user-configured MCP server. Arguments: { "serverId": string, "toolName": string, "arguments": object }
+
+Use call_user_mcp_tool when the user's question relates to one of these servers.`;
 	}
 
-	return `${BASE_PLANNER_PROMPT}
+	// Build env MCP prompt (legacy support)
+	let envMcpPrompt = "";
+	if (envMcpTools.length > 0 && env.MCP_SERVER_URL) {
+		envMcpPrompt = `
 
-Optional MCP bridge:
+Environment MCP bridge:
 - call_mcp_tool: Call one allowlisted remote MCP tool. Arguments: { "toolName": string, "arguments": object }
 
-Allowed MCP tool names: ${mcpTools.join(", ")}
+Allowed MCP tool names: ${envMcpTools.join(", ")}
 
-Only use call_mcp_tool when one of the allowed MCP tools is directly relevant. Never invent MCP tool names.${skillPrompt}`;
+Only use call_mcp_tool when one of the allowed MCP tools is directly relevant.`;
+	}
+
+	return `${BASE_PLANNER_PROMPT}${envMcpPrompt}${userMcpPrompt}${skillPrompt}`;
 }
 
 async function loadSkill(
@@ -906,6 +1171,71 @@ function formatSkillForPrompt(skill: Skill): string {
 		`Suggested tools: ${skill.allowedTools.join(", ") || "none"}`,
 		skill.content,
 	].join("\n");
+}
+
+async function fetchWebpage(env: Env, url: string): Promise<string> {
+	if (!url) {
+		return "Error: No URL provided";
+	}
+
+	// Validate URL
+	try {
+		new URL(url);
+	} catch {
+		return `Error: Invalid URL "${url}"`;
+	}
+
+	// Check if Browser Run is available
+	if (!env.BROWSER) {
+		// Fallback to simple fetch if Browser Run not configured
+		try {
+			const response = await fetch(url, {
+				headers: {
+					"User-Agent": "Mozilla/5.0 (compatible; AgentWorkspace/1.0)",
+				},
+			});
+			if (!response.ok) {
+				return `Error: Failed to fetch ${url} (${response.status})`;
+			}
+			const text = await response.text();
+			// Basic HTML to text conversion
+			const stripped = text
+				.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+				.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+				.replace(/<[^>]+>/g, " ")
+				.replace(/\s+/g, " ")
+				.trim();
+			return stripped.slice(0, 8000) + (stripped.length > 8000 ? "..." : "");
+		} catch (error) {
+			return `Error fetching ${url}: ${error instanceof Error ? error.message : "Unknown error"}`;
+		}
+	}
+
+	// Use Browser Run to fetch and convert to markdown
+	try {
+		const result = await env.BROWSER.quickAction("markdown", {
+			url,
+			gotoOptions: {
+				waitUntil: "networkidle2",
+			},
+		});
+		
+		const markdown = await result.text();
+		// Parse the response - it returns JSON with success and result fields
+		try {
+			const parsed = JSON.parse(markdown);
+			if (parsed.success && parsed.result) {
+				const content = parsed.result;
+				return content.slice(0, 10000) + (content.length > 10000 ? "\n\n[Content truncated...]" : "");
+			}
+			return parsed.result || markdown;
+		} catch {
+			// If not JSON, return as-is
+			return markdown.slice(0, 10000);
+		}
+	} catch (error) {
+		return `Error fetching ${url} with Browser Run: ${error instanceof Error ? error.message : "Unknown error"}`;
+	}
 }
 
 function searchRunbook(query: string): string {
@@ -986,6 +1316,61 @@ async function callMcpTool(
 	}
 
 	return formatMcpResponse(responseText, response.headers.get("content-type") ?? "");
+}
+
+async function callUserMcpTool(
+	userMcpServers: UserMcpServer[],
+	serverId: string,
+	toolName: string,
+	args: Record<string, unknown>,
+): Promise<string> {
+	if (!serverId) {
+		return "Error: No MCP server ID provided";
+	}
+
+	const server = userMcpServers.find((s) => s.id === serverId);
+	if (!server) {
+		return `Error: MCP server '${serverId}' not found or not enabled`;
+	}
+
+	// Check tool allowlist if configured
+	if (server.toolAllowlist.length > 0 && !server.toolAllowlist.includes(toolName)) {
+		return `MCP tool '${toolName}' is not allowed on server '${server.name}'. Allowed tools: ${server.toolAllowlist.join(", ")}`;
+	}
+
+	const headers: Record<string, string> = {
+		"accept": "application/json, text/event-stream",
+		"content-type": "application/json",
+	};
+
+	if (server.authToken) {
+		headers["authorization"] = `Bearer ${server.authToken}`;
+	}
+
+	try {
+		const response = await fetch(server.url, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({
+				jsonrpc: "2.0",
+				id: crypto.randomUUID(),
+				method: "tools/call",
+				params: {
+					name: toolName,
+					arguments: args,
+				},
+			}),
+		});
+
+		const responseText = await response.text();
+		if (!response.ok) {
+			return `MCP server '${server.name}' returned ${response.status}: ${responseText}`;
+		}
+
+		return formatMcpResponse(responseText, response.headers.get("content-type") ?? "");
+	} catch (error) {
+		return `Error calling MCP server '${server.name}': ${error instanceof Error ? error.message : "Unknown error"}`;
+	}
 }
 
 function buildMcpHeaders(env: Env): HeadersInit {

@@ -217,9 +217,15 @@ export function Sidebar({ theme, toggleTheme }: SidebarProps) {
 
       {/* Footer */}
       <div className={styles.footer}>
-        <button className={styles.footerButton} title="Settings">
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            `${styles.footerButton} ${isActive ? styles.active : ''}`
+          }
+          title="Settings"
+        >
           <Settings size={18} />
-        </button>
+        </NavLink>
         <button
           className={styles.footerButton}
           onClick={toggleTheme}
