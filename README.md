@@ -2,6 +2,8 @@
 
 A full-featured agentic workspace template running entirely on Cloudflare's developer platform. Build AI-powered productivity tools with workspace management, real-time streaming, user authentication via Cloudflare Access, and persistent storage with D1.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cstemp/agentic-chat-template)
+
 <!-- dash-content-start -->
 
 ## Overview
