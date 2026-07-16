@@ -342,14 +342,29 @@ This template implements the core patterns from Cloudflare's [Enterprise AI Agen
 
 ### What This Template Implements
 
-| Component | Implementation |
-|-----------|----------------|
-| **Workers** | API endpoints, SSE streaming, static assets |
-| **Access** | User authentication via JWT |
-| **AI Gateway** | Model governance, caching, analytics |
-| **D1** | Workspace and message persistence |
-| **Skills library** | Markdown-based reusable workflows |
-| **MCP integration** | Optional remote tool bridge |
+| Component | Implementation | Status |
+|-----------|----------------|--------|
+| **Workers** | API endpoints, SSE streaming, static assets | Complete |
+| **Access** | User authentication via JWT | Complete |
+| **AI Gateway** | Model governance, caching, analytics | Complete |
+| **D1** | Workspace and message persistence | Complete |
+| **Browser Run** | Web content extraction via `fetch_webpage` tool | Complete |
+| **Skills** | Markdown-based reusable workflows (file-based) | Working |
+| **MCP integration** | User-configurable MCP servers | Complete |
+| **Context library** | Shared organizational knowledge | UI only* |
+| **In-app analytics** | Usage tracking dashboard | Not yet |
+
+*The Context page (`/context`) provides the UI framework but requires backend implementation. See "Adding Shared Context" below.
+
+### Current Limitations
+
+This template provides a functional starting point, not a complete enterprise deployment. Key areas for extension:
+
+1. **Skills are file-based**: Skills are static markdown files. For dynamic skill management (create/edit/delete via UI), add a `skills` table to D1 and CRUD endpoints.
+
+2. **Context is UI-only**: The Context page shows the intended UX but has no backend. Implementing shared context requires storage (R2/D1), optional vectorization (Vectorize), and injection into agent prompts.
+
+3. **Analytics are external**: Usage data is available in AI Gateway and Workers dashboards, but there's no in-app analytics. Add Workers Analytics Engine for custom metrics.
 
 ### Evolving Toward Enterprise
 
@@ -385,6 +400,30 @@ For workspaces that generate and run code:
 | Full dev environment | [Sandbox SDK](https://developers.cloudflare.com/sandbox/) |
 | Browser automation | [Browser Run](https://developers.cloudflare.com/browser-run/) |
 
+#### Shared Context Library
+
+The reference architecture emphasizes a curated, read-only library of organizational context that agents can draw from. To implement:
+
+1. **Storage**: Use [R2](https://developers.cloudflare.com/r2/) for documents and reference materials
+2. **Search**: Add [Vectorize](https://developers.cloudflare.com/vectorize/) for semantic retrieval
+3. **Injection**: Load relevant context into agent prompts based on the conversation
+
+```sql
+-- Example schema extension for context sources
+CREATE TABLE context_sources (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,           -- null for org-wide context
+    workspace_id TEXT,      -- null for user-wide context
+    type TEXT NOT NULL,     -- 'document', 'url', 'database'
+    name TEXT NOT NULL,
+    content TEXT,           -- inline content or R2 path
+    vector_status TEXT DEFAULT 'pending',
+    created_at INTEGER DEFAULT (unixepoch())
+);
+```
+
+The Context page UI (`/context`) is ready for this—it just needs the API endpoints and storage backend.
+
 #### File Storage with R2
 
 For large files, versioned outputs, and shared context libraries, add [R2](https://developers.cloudflare.com/r2/):
@@ -416,11 +455,13 @@ Add [Workers Analytics Engine](https://developers.cloudflare.com/analytics/analy
 | Aspect | This Template | Full Enterprise |
 |--------|---------------|-----------------|
 | State management | D1 (stateless Workers) | Durable Objects (stateful) |
-| Agent orchestration | Custom loop | Agents SDK |
+| Agent orchestration | Custom agentic loop | Agents SDK |
+| Skills | File-based markdown | R2 + versioned publishing |
+| Context library | UI placeholder | R2 + Vectorize |
 | File storage | Inline in D1 | R2 with versioning |
-| Code execution | Not included | Dynamic Workers, Sandbox |
-| Tool governance | MCP allowlist | MCP Server Portals |
-| Analytics | AI Gateway logs | Analytics Engine |
+| Code execution | Browser Run only | Dynamic Workers, Sandbox |
+| Tool governance | User MCP allowlists | MCP Server Portals |
+| Analytics | AI Gateway (external) | Workers Analytics Engine |
 
 ## Resources
 
@@ -433,4 +474,6 @@ Add [Workers Analytics Engine](https://developers.cloudflare.com/analytics/analy
 - [Agents SDK](https://developers.cloudflare.com/agents/)
 - [Durable Objects](https://developers.cloudflare.com/durable-objects/)
 - [R2 Storage](https://developers.cloudflare.com/r2/)
+- [Vectorize](https://developers.cloudflare.com/vectorize/)
+- [Workers Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/)
 - [MCP Server Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)
