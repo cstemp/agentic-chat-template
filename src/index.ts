@@ -581,17 +581,17 @@ async function handleAgentRequest(
 					});
 				}
 
-				sendAgentEvent(controller, {
-					type: "status",
-					message: "Planning the workflow",
-				});
-
 				const plan = await createPlan(messages, env, skill, modelId);
-				sendAgentEvent(controller, {
-					type: "plan",
-					thought: plan.thought,
-					toolCalls: plan.tool_calls,
-				});
+				const hasToolCalls = plan.tool_calls.length > 0;
+
+				// Only show planning UI if we're actually using tools
+				if (hasToolCalls) {
+					sendAgentEvent(controller, {
+						type: "plan",
+						thought: plan.thought,
+						toolCalls: plan.tool_calls,
+					});
+				}
 
 				const toolResults: ToolResult[] = [];
 				for (const toolCall of plan.tool_calls.slice(0, MAX_TOOL_CALLS)) {
@@ -612,11 +612,6 @@ async function handleAgentRequest(
 						result,
 					});
 				}
-
-				sendAgentEvent(controller, {
-					type: "status",
-					message: "Composing final answer",
-				});
 				try {
 					await streamFinalAnswer(messages, plan, toolResults, env, controller, skill, modelId);
 				} catch (error) {
