@@ -281,10 +281,101 @@ npx wrangler d1 execute agent-workspace-db --file=./schema.sql
 - User data is isolated by user ID from Access JWT
 - Dev auth (`X-Dev-User-Email`) is disabled by default
 
+## Reference Architecture
+
+This template implements the core patterns from Cloudflare's [Enterprise AI Agent Workspace](https://developers.cloudflare.com/reference-architecture/diagrams/ai/enterprise-ai-agent-workspace/) reference architecture. It provides a foundation you can extend toward a full enterprise deployment.
+
+### What This Template Implements
+
+| Component | Implementation |
+|-----------|----------------|
+| **Workers** | API endpoints, SSE streaming, static assets |
+| **Access** | User authentication via JWT |
+| **AI Gateway** | Model governance, caching, analytics |
+| **D1** | Workspace and message persistence |
+| **Skills library** | Markdown-based reusable workflows |
+| **MCP integration** | Optional remote tool bridge |
+
+### Evolving Toward Enterprise
+
+The reference architecture describes additional capabilities for production enterprise deployments. Here's how to extend this template:
+
+#### Durable Objects for Real-time State
+
+This template uses D1 for persistence with stateless Workers. For real-time collaboration, persistent WebSocket connections, and stronger consistency, migrate workspace state to [Durable Objects](https://developers.cloudflare.com/durable-objects/):
+
+```
+Workers (stateless) → Durable Object per workspace (stateful)
+                   → Durable Object per user (profile/registry)
+```
+
+Each workspace becomes a single Durable Object that owns conversation state, coordinates tools, and survives browser disconnects.
+
+#### Agents SDK for Orchestration
+
+Replace the custom agentic loop with the [Agents SDK](https://developers.cloudflare.com/agents/) for production-grade orchestration:
+
+- Built-in conversation management
+- Structured tool calling
+- Better streaming patterns
+- Human-in-the-loop support
+
+#### Code Execution Environments
+
+For workspaces that generate and run code:
+
+| Use Case | Cloudflare Primitive |
+|----------|---------------------|
+| Bounded code snippets | [Dynamic Workers](https://developers.cloudflare.com/dynamic-workers/) |
+| Full dev environment | [Sandbox SDK](https://developers.cloudflare.com/sandbox/) |
+| Browser automation | [Browser Run](https://developers.cloudflare.com/browser-run/) |
+
+#### File Storage with R2
+
+For large files, versioned outputs, and shared context libraries, add [R2](https://developers.cloudflare.com/r2/):
+
+- Store file attachments (currently inline in D1)
+- Version workspace outputs
+- Host shared skills/context library
+- Backup sandbox environments
+
+#### MCP Server Portals
+
+For enterprise tool governance, use [MCP Server Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/) instead of direct MCP connections:
+
+- Centralized tool curation per team
+- Access policies and credential routing
+- Audit logging for tool calls
+
+#### Analytics and Observability
+
+Add [Workers Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/) for:
+
+- Usage tracking per user/workspace
+- Model cost attribution
+- Tool call analytics
+- Lifecycle events
+
+### Architecture Comparison
+
+| Aspect | This Template | Full Enterprise |
+|--------|---------------|-----------------|
+| State management | D1 (stateless Workers) | Durable Objects (stateful) |
+| Agent orchestration | Custom loop | Agents SDK |
+| File storage | Inline in D1 | R2 with versioning |
+| Code execution | Not included | Dynamic Workers, Sandbox |
+| Tool governance | MCP allowlist | MCP Server Portals |
+| Analytics | AI Gateway logs | Analytics Engine |
+
 ## Resources
 
+- [Enterprise AI Agent Workspace Reference Architecture](https://developers.cloudflare.com/reference-architecture/diagrams/ai/enterprise-ai-agent-workspace/)
 - [Cloudflare Workers](https://developers.cloudflare.com/workers/)
 - [Workers AI](https://developers.cloudflare.com/workers-ai/)
 - [AI Gateway](https://developers.cloudflare.com/ai-gateway/)
 - [D1 Database](https://developers.cloudflare.com/d1/)
 - [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/)
+- [Agents SDK](https://developers.cloudflare.com/agents/)
+- [Durable Objects](https://developers.cloudflare.com/durable-objects/)
+- [R2 Storage](https://developers.cloudflare.com/r2/)
+- [MCP Server Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)
