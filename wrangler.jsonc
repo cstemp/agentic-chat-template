@@ -19,13 +19,14 @@
 		"binding": "AI"
 	},
 	// D1 database for workspace persistence
-	// Create with: npx wrangler d1 create agent-workspace-db
-	// Then run schema: npx wrangler d1 execute agent-workspace-db --file=./schema.sql
+	// 1. Create: npx wrangler d1 create agent-workspace-db
+	// 2. Copy the database_id from the output and paste it below
+	// 3. Run schema: npx wrangler d1 execute agent-workspace-db --remote --file=./schema.sql
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "agent-workspace-db",
-			"database_id": "a87e4827-aad6-4ae0-a099-848749dd244e"
+			"database_id": "YOUR_D1_DATABASE_ID"
 		}
 	],
 	"vars": {
