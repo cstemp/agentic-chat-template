@@ -270,7 +270,16 @@ export default {
 
 		// Handle static assets (frontend)
 		if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
-			return env.ASSETS.fetch(request);
+			// Try to serve the exact asset first
+			const assetResponse = await env.ASSETS.fetch(request);
+			
+			// If asset not found (404), serve index.html for SPA client-side routing
+			if (assetResponse.status === 404) {
+				const indexRequest = new Request(new URL("/index.html", request.url), request);
+				return env.ASSETS.fetch(indexRequest);
+			}
+			
+			return assetResponse;
 		}
 
 		// CORS headers for API routes
